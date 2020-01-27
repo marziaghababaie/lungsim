@@ -58,7 +58,11 @@ contains
        !note a linear q gradient should  be set up to scale for shunt fraction automatically
        call initial_gasexchange(149.0_dp)
        call solve_transport
-
+    case('particle_transport')
+        print *, 'You are solving a particle transport model'
+    case DEFAULT
+        print*, 'The problem does not exist, exiting'
+        stop
     end select
    call enter_exit(sub_name,2)
  end subroutine initialise_transport

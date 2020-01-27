@@ -27,8 +27,13 @@ module indices
   integer :: num_nu,nu_vol,nu_comp,nu_conc2,nu_Vdot0,nu_Vdot1, &
        nu_Vdot2,nu_dpdt,nu_pe,nu_vt,nu_air_press,nu_conc1,nu_vent,&
        nu_vd,nu_perf,nu_blood_press
-  !indices for gas exchange field
-! indices for gasex_field
+       
+  ! TEMP ARC INDICES FOr particle transport, to be merged
+   integer :: no_type, nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
+   ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0
+  
+  
+  ! indices for gasex_field
   integer,parameter :: num_gx = 12
   integer,parameter :: ng_p_alv_o2=1      ! index for alveolar partial pressure of O2
   integer,parameter :: ng_p_alv_co2=2     ! index for alveolar partial pressure of CO2
@@ -63,6 +68,10 @@ public num_nu,nu_vol,nu_comp, nu_conc2,nu_Vdot0,nu_Vdot1, &
 public num_gx, ng_p_alv_o2,ng_p_alv_co2,ng_p_ven_o2,ng_p_ven_co2, &
        ng_p_cap_o2, ng_p_cap_co2,ng_source_o2,ng_source_co2, &
        ng_Vc, ng_sa, ng_tt, ng_time
+       
+! TEMP ARC INDICES FOr particle transport, to be merged
+public no_type, nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
+       ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0
 
 
 public model_type
@@ -70,7 +79,7 @@ public model_type
 !Interfaces
 private
 public define_problem_type,ventilation_indices, perfusion_indices, get_ne_radius, get_nj_conc1, &
-       growing_indices
+       growing_indices,particle_indices
 
 contains
 
@@ -88,23 +97,29 @@ contains
     call enter_exit(sub_name,1)
     select case (PROBLEM_TYPE)
       case ('gas_exchange')
-        print *, 'You are solving a gas exchange model, setting up indices'
+        print *, 'You are solving a gas exchange model, setting up'
         call exchange_indices
       case ('gas_mix')
-        print *, 'You are solving a gas mixing model, setting up indices'
+        print *, 'You are solving a gas mixing model, setting up'
         call gasmix_indices
       case ('gas_transfer')
-        print *, 'You are solving a gas transfer model, setting up indices'
+        print *, 'You are solving a gas transfer model, setting up'
          call exchange_indices
       case ('perfusion')
-        print *, 'You are solving a static perfusion model, setting up indices'
+        print *, 'You are solving a static perfusion model, setting up'
         call perfusion_indices
       case ('ventilation')
-        print *, 'You are solving a ventilation model, setting up indices'
+        print *, 'You are solving a ventilation model, setting up'
         call ventilation_indices
       case('grow_tree')
-        print *, 'You are solving a growing problem, setting up indices'
+        print *, 'You are solving a growing problem, setting up'
         call growing_indices
+      case('particle_transport')
+        print*, 'You are solving a particle transport problem, setting up'
+        call particle_indices
+      case DEFAULT
+        print*, 'The selected problem type does not exist, exiting'
+        stop
     end select
     model_type=TRIM(PROBLEM_TYPE)
     call enter_exit(sub_name,2)
@@ -254,6 +269,68 @@ contains
     num_nu=0
     call enter_exit(sub_name,2)
   end subroutine growing_indices
+!
+!######################################################################
+!
+!> Perfusion indices
+  subroutine particle_indices
+  !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_PARTICLE_INDICES" :: PARTICLEINDICES
+    use diagnostics, only: enter_exit
+    implicit none
+    character(len=60) :: sub_name
+
+    sub_name = 'particle_indices'
+    call enter_exit(sub_name,1)
+    ! indices for node_field
+    num_nj=3
+    nj_conc1=2
+    nj_conc2=3
+    no_type=4 !ARC - what is this and why does it not follow convention?
+    !added for DPI calc, HBK, Aug 2018
+    nj_mass=6
+    nj_loss=7
+    nj_loss_dif=8
+    nj_loss_sed=9
+    nj_loss_imp=10
+    
+    ! indices for elem_field
+    num_ne=9
+    ne_radius=1
+    ne_length=2
+    ne_vol=3
+    ne_resist=4
+    ne_Vdot=5
+    ne_Qdot=6
+    ne_dvdt=7
+
+    
+    !!! ARC why are these not following convention and seemingly random
+    ne_mass = 12  ! encountered in part calc, HKSep6'18
+    ne_part_vel = 14
+    ne_flow = 6
+
+    ! indices for unit_field
+    num_nu=7
+    nu_vol=1
+    nu_comp=2
+    nu_Vdot0=3
+    nu_vd=4
+    nu_perf=5
+    nu_conc1=6
+    nu_conc2=7
+    nu_conc3=19 !ARC - again, why does this not meet convention??
+    
+    
+    !added for DPI calc, HBK, Aug 2018
+    nu_flow0=3
+    nu_flow1=4
+    nu_dpdt_0 = 18
+    
+    
+    call enter_exit(sub_name,2)
+  end subroutine particle_indices
+  
+
 !
 !######################################################################
 !
