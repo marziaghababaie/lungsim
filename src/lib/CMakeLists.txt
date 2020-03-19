@@ -8,7 +8,6 @@ set(LIB_SRCS
   filenames.f90
   field_utilities.f90
   gas_exchange.f90
-  gasmix.f90
   geometry.f90
   growtree.f90
   indices.f90
@@ -17,8 +16,9 @@ set(LIB_SRCS
   mesh_utilities.f90
   other_consts.f90
   pressure_resistance_flow.f90
-  solve.f90
   species_transport.f90
+  particle_transport.f90
+  solve.f90
   ventilation.f90
   wave_transmission.f90
 )

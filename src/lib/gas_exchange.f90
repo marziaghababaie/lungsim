@@ -20,7 +20,7 @@ module gas_exchange
 
   !Interfaces
   private 
-  public initial_gasexchange,steadystate_gasexchange
+  public solve_ss_gasexchange
 
   real(dp),parameter :: standard_molar_vol = 22.4136e+3_dp ! at STP; mm^3/mmol
   real(dp),parameter :: p_water = 47.0_dp !mmHg
@@ -58,82 +58,14 @@ module gas_exchange
   !  c_ven_co2 ! mixed venous content of CO2 (CvCO2)
 
 contains
-!
-!##############################################################################
-!
- subroutine initial_gasexchange(initial_concentration,surface_area,V_cap)
- !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_INITIAL_GASEXCHANGE" :: INITIAL_GASEXCHANGE
-   use indices
-   use arrays, only: dp,elem_units_below,gasex_field,node_field,num_nodes,&
-         num_units,unit_field
-   use diagnostics, only: enter_exit
-
-   !local variables
-   real(dp),intent(in) :: initial_concentration
-   real(dp), optional ::  surface_area,V_cap
-
-    integer :: nunit
-    real(dp) :: Vcap_unit
-    real(dp),parameter :: p_water = 47.0_dp
-    real(dp),parameter :: press_atm=760.0_dp !atmospheric pressure, mmHg
-
-
-   character(len=60) :: sub_name
-
-   sub_name = 'initial_gasexchange'
-   call enter_exit(sub_name,1)
-
-!!! allocate memory for the gasex_field array, if not already allocated
-    if(.not.allocated(gasex_field)) allocate(gasex_field(num_gx,num_units))
-
-!!! initialiase nj_conc2 (for CO2 concentration); currently hardcoded to 40 mmHg
-    node_field(nj_conc2,1:num_nodes) = 40.0_dp/(o2molvol*(press_atm-p_water))
-    write(*,'('' Initialising Palv_CO2 to 40 mmHg'')')
-
-!!! initialise the gas exchange field for o2 partial pressures
-    gasex_field(ng_p_alv_o2,1:num_units) = initial_concentration* &
-         o2molvol*(press_atm-p_water)
-    gasex_field(ng_p_cap_o2,1:num_units) = initial_concentration*&
-         o2molvol*(press_atm-p_water)
-
-    gasex_field(ng_p_alv_co2,1:num_units) = 40.0_dp ! mmHg; should make this user defined
-    gasex_field(ng_p_ven_o2,1:num_units) = 40.0_dp ! mmHg; should make this user defined
-
-    unit_field(nu_conc1,1:num_units) = gasex_field(ng_p_alv_o2,1:num_units)/&
-         (o2molvol*(press_atm-p_water)) ! from mmHg to mmol/mm^3
-    unit_field(nu_conc2,1:num_units) = gasex_field(ng_p_alv_co2,1:num_units)/&
-         (o2molvol*(press_atm-p_water)) ! from mmHg to mmol/mm^3
-
-!!! initialise the gas exchange field for co2 partial pressures
-    gasex_field(ng_p_alv_co2,1:num_units) = 40.0_dp ! mmHg; should make this user defined
-    gasex_field(ng_p_cap_co2,1:num_units) = 40.0_dp ! mmHg; should make this user defined
-    gasex_field(ng_p_ven_co2,1:num_units) = 45.0_dp ! mmHg; should make this user defined
-    if(present(surface_area))then
-!!! initialise the time blood has been in capillaries
-      gasex_field(ng_time,1:num_units) = 0.0_dp
-
-!!! capillary volume per gas exchange unit = transit time * flow
-    ! elem_units_below is the EFFECTIVE number of units, so this is correct
-    !Note that these are calculated on a per unit basis in the perfusion model so can be read in for future iterations
-      Vcap_unit = V_cap/elem_units_below(1) ! the capillary volume per gas exchange unit
-      gasex_field(ng_Vc,1:num_units) = Vcap_unit
-      gasex_field(ng_sa,1:num_units) = surface_area/elem_units_below(1)
-
-!!! transit time through the gas exchange unit = capillary volume/flow
-      forall (nunit=1:num_units) gasex_field(ng_tt,nunit) = &
-           Vcap_unit/unit_field(nu_perf,nunit)
-    endif
-
-   call enter_exit(sub_name,2)
- end subroutine initial_gasexchange
 
 !
 !###########################################################################################
 !
- subroutine steadystate_gasexchange(c_art_o2,c_ven_o2,&
+ subroutine solve_ss_gasexchange(c_art_o2,c_ven_o2,&
        p_art_co2,p_art_o2,p_i_o2,p_ven_co2,p_ven_o2,shunt_fraction,&
        VCO2,VO2)
- !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_STEADYSTATE_GASEXCHANGE" :: STEADYSTATE_GASEXCHANGE
+ !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_SOLVE_SS_GASEEXCHANGE :: SOLVE_SS_GASEXCHANGE
     use arrays,only: dp,elem_field,num_units,gasex_field,node_field,units,unit_field,&
          elem_units_below,elem_nodes
     use indices
@@ -153,7 +85,7 @@ contains
     logical :: continue
     character(len=60) :: sub_name
 
-    sub_name = 'steadystate_gasexchange'
+    sub_name = 'solve_ss_gasexchange'
     call enter_exit(sub_name,1)
 
 
@@ -366,7 +298,7 @@ contains
 
     call enter_exit(sub_name,2)
 
-  end subroutine steadystate_gasexchange
+  end subroutine solve_ss_gasexchange
 
   !!! ####################################################
 

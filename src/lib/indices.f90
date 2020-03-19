@@ -29,8 +29,8 @@ module indices
        nu_vd,nu_perf,nu_blood_press
        
   ! TEMP ARC INDICES FOr particle transport, to be merged
-   integer :: no_type, nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
-   ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0
+   integer ::  nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
+   ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0,nj_conc3
   
   
   ! indices for gasex_field
@@ -70,8 +70,8 @@ public num_gx, ng_p_alv_o2,ng_p_alv_co2,ng_p_ven_o2,ng_p_ven_co2, &
        ng_Vc, ng_sa, ng_tt, ng_time
        
 ! TEMP ARC INDICES FOr particle transport, to be merged
-public no_type, nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
-       ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0
+public nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
+       ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0,nj_conc3
 
 
 public model_type
@@ -272,7 +272,7 @@ contains
 !
 !######################################################################
 !
-!> Perfusion indices
+!> Particle indices
   subroutine particle_indices
   !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_PARTICLE_INDICES" :: PARTICLEINDICES
     use diagnostics, only: enter_exit
@@ -282,19 +282,19 @@ contains
     sub_name = 'particle_indices'
     call enter_exit(sub_name,1)
     ! indices for node_field
-    num_nj=3
+    num_nj=9
     nj_conc1=2
     nj_conc2=3
-    no_type=4 !ARC - what is this and why does it not follow convention?
+    nj_conc3 =4
     !added for DPI calc, HBK, Aug 2018
-    nj_mass=6
-    nj_loss=7
-    nj_loss_dif=8
-    nj_loss_sed=9
-    nj_loss_imp=10
+    nj_mass=5
+    nj_loss=6
+    nj_loss_dif=7
+    nj_loss_sed=8
+    nj_loss_imp=9
     
     ! indices for elem_field
-    num_ne=9
+    num_ne=10
     ne_radius=1
     ne_length=2
     ne_vol=3
@@ -302,29 +302,22 @@ contains
     ne_Vdot=5
     ne_Qdot=6
     ne_dvdt=7
-
-    
-    !!! ARC why are these not following convention and seemingly random
-    ne_mass = 12  ! encountered in part calc, HKSep6'18
-    ne_part_vel = 14
-    ne_flow = 6
+    ne_A_a = 8
+    ne_mass = 9  ! encountered in part calc, HKSep6'18
+    ne_part_vel = 10
 
     ! indices for unit_field
-    num_nu=7
-    nu_vol=1
+    num_nu=9
+    nu_vol=1 !volume of unit
     nu_comp=2
-    nu_Vdot0=3
+    nu_Vdot0=3 !flow in unit
     nu_vd=4
     nu_perf=5
-    nu_conc1=6
+    nu_conc1=6 ! conc in unit
     nu_conc2=7
-    nu_conc3=19 !ARC - again, why does this not meet convention??
-    
-    
+    nu_conc3=8 !ARC - again, why does this not meet convention??
     !added for DPI calc, HBK, Aug 2018
-    nu_flow0=3
-    nu_flow1=4
-    nu_dpdt_0 = 18
+    nu_dpdt_0 = 9
     
     
     call enter_exit(sub_name,2)

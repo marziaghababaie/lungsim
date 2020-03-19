@@ -31,6 +31,7 @@ module geometry
   public define_node_geometry_2d
   public define_data_geometry
   public group_elem_parent_term
+  public group_elem_by_parent
   public define_rad_from_file
   public define_rad_from_geom
   public element_connectivity_1d
@@ -2152,6 +2153,7 @@ contains
        ne=units(nunit)
        vol_below(ne) = vol_below(ne) + unit_field(nu_vol,nunit) !add elastic unit volume
     enddo !nunit
+    
 
     do ne=num_elems,2,-1
        ne0=elem_cnct(-1,1,ne)

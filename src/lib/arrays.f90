@@ -49,6 +49,17 @@ module arrays
   real(dp),allocatable :: node_xyz_2d(:,:,:,:)
   real(dp),allocatable :: gasex_field(:,:) !gasexchange specific fields
   real(dp),allocatable :: unit_field(:,:) !properties of elastic units
+  
+  !FEM Matrices for a given problem
+  integer,allocatable :: sparsity_col(:),reduced_col(:)
+  integer,allocatable :: sparsity_row(:),reduced_row(:)
+  real(dp),allocatable :: global_K(:),global_M(:),global_AA(:),global_BB(:)
+  real(dp),allocatable :: global_R(:)
+  integer :: NonZeros_unreduced
+  
+  !TEMP: ARC SOME SORT OF ACINUS FIELD FOR PARTICLES, SHOULS be a unit_field
+  real(dp),allocatable :: part_acinus_field(:,:) !for particle deposition problems
+
   real(dp),allocatable :: node_field(:,:)
   real(dp),allocatable :: scale_factors_2d(:,:)
 
@@ -77,6 +88,41 @@ module arrays
     real(dp) :: R_art_terminal=0.10000e-04_dp !m
     real(dp) :: R_vein_terminal=0.90000e-05!m
   end type capillary_bf_parameters
+  
+  type transport_parameters
+    real(dp) :: ideal_mass
+    real(dp) :: total_volume_change
+    real(dp) :: inlet_concentration(3)!currently hardcoded to up to three different materials
+    real(dp) :: initial_concentration(3)
+  end type transport_parameters
+  
+  !TEMP: ARC: particle transport parameters
+  type particle_parameters
+    integer :: num_brths_gm
+    real(dp) :: solve_tolerance, initial_volume, diffusion_coeff, gravityx,&
+      gravityy,gravityz,pdia,time_inspiration,time_breath_hold,time_expiration,&
+      dt_gm, VtotTLC,totacinarLength
+    real(dp) :: tidal_volume = 1.e+06_dp! tidal volume target, mm^3
+    real(dp) :: FRC = 3.36
+    real(dp) :: mu = 18.69e-6_dp
+    real(dp) :: prho =  1.0e-3_dp             ! ! density of particles [g/mm^3]
+    real(dp) :: lambda = 7.022e-5_dp  ! [mm] mean free path necessary
+    real(dp) :: kBoltz = 1.38e-14_dp  ! ! Boltzmann constant [J/K*1d9]=[kg*m^2/s^2/K*1d9]=[g*mm^2/s^2/K]
+    real(dp) :: Temperature = 36.0_dp+273.15_dp ! Temperature [K] from rho*R*T
+    integer :: out_itr_max = 200      ! max # (outer) iterations using GMRES solver.
+    integer :: inr_itr_max = 100      ! max # (inner) iterations using GMRES solver.
+
+    logical :: coupled = .FALSE.
+    logical :: last_breath, inspiration
+    integer :: n_export
+    character(len=200) :: lung_root
+    character(len=200) :: results_location
+    character(len=20) :: study
+    character(len=20) :: subject
+    character(len=20) :: protocol
+    character(len=100) :: group_name
+    real(dp) :: diffu,LacTLC(10),RacTLC(10),VacTLC(9)
+  end type particle_parameters
 
   type admittance_param
     character (len=20) :: admittance_type
@@ -122,7 +168,13 @@ module arrays
          num_lines_2d, lines_2d, line_versn_2d, lines_in_elem, nodes_in_line, elems_2d, &
          elem_cnct_2d, elem_nodes_2d, elem_versn_2d, elem_lines_2d, elems_at_node_2d, arclength, &
          scale_factors_2d, parentlist, fluid_properties, elasticity_vessels, admittance_param, &
-         elasticity_param, all_admit_param
+         elasticity_param, all_admit_param,transport_parameters
+  !TEMP ARC particle stuff that is wrong
+  public part_acinus_field, particle_parameters
+  
+  !FEM ARRAYS
+  public sparsity_col,reduced_col,sparsity_row,&
+      reduced_row, global_K, global_M, global_AA, global_BB, global_R,NonZeros_unreduced
 
 contains
   subroutine set_node_field_value(row, col, value)

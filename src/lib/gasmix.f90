@@ -27,108 +27,6 @@ module gasmix
 
 contains
 
-!!!#########################################################################
-
-  subroutine assemble_gasmix(diffusion_coeff,nonzeros_unreduced)
-
-    use arrays,only: dp,elem_nodes,num_elems
-    use geometry, only: volume_of_mesh
-    use diagnostics, only: enter_exit
-    implicit none
-
-    integer,intent(in) :: nonzeros_unreduced
-    real(dp),intent(in) :: diffusion_coeff
-
-    integer :: i,j,ncol,ne,nentry,nrow
-    real(dp) :: elem_K(2,2),elem_M(2,2),elem_R(2)
-    logical :: found
-    character(len=60) :: sub_name
-
-!!!................................................................
-
-    sub_name = 'assemble_gasmix'
-    call enter_exit(sub_name,1)
-
-    global_K(1:nonzeros_unreduced) = 0.0_dp
-    global_M(1:nonzeros_unreduced) = 0.0_dp
-
-    do ne=1,num_elems
-       call element_gasmix(ne,elem_K,elem_M,elem_R,diffusion_coeff)
-       do i=1,2
-          nrow = elem_nodes(i,ne)
-          do j=1,2
-             ncol = elem_nodes(j,ne)
-             found=.false.
-             nentry = sparsity_row(nrow) ! start check at start of row
-             do while (.not.found)
-                if(ncol.eq.sparsity_col(nentry))then
-                   found = .true.
-                else
-                   nentry = nentry+1
-                endif
-             enddo
-             global_K(nentry) = global_K(nentry) + elem_K(i,j)
-             global_M(nentry) = global_M(nentry) + elem_M(i,j)
-          enddo !j
-       enddo !i
-    enddo !noelem
-
-    call enter_exit(sub_name,2)
-
-  end subroutine assemble_gasmix
-
-!!!################################################################################
-
-  subroutine calc_mass(nj,nu_field,gas_mass)
-    use arrays,only: dp,elem_cnct,elem_nodes,elem_symmetry,&
-         node_field,num_elems,num_nodes,num_units,elem_field,units,unit_field
-    use indices,only: ne_vol,nu_vol
-    use diagnostics, only: enter_exit
-    implicit none
-
-    integer,intent(in) :: nj,nu_field
-    real(dp) :: gas_mass
-    !     Local Variables
-    integer :: ne,ne0,np1,np2,nunit
-    real(dp) :: average_conc
-    real(dp),allocatable :: tree_mass(:)
-    character(len=60):: sub_name
-
-    !...........................................................................
-
-    sub_name = 'calc_mass'
-    call enter_exit(sub_name,1)
-
-    if(.not.allocated(tree_mass)) allocate(tree_mass(num_nodes))
-
-    ! initialise to the mass in each element
-    do ne=1,num_elems
-       np1=elem_nodes(1,ne)
-       np2=elem_nodes(2,ne)
-       average_conc = (node_field(nj,np1)+node_field(nj,np2))/2.0_dp
-       tree_mass(ne) = average_conc*elem_field(ne_vol,ne)
-    enddo
-
-    ! add the mass in each elastic unit to terminal elements
-    do nunit=1,num_units
-       ne=units(nunit)
-       tree_mass(ne) = tree_mass(ne) + &
-            unit_field(nu_vol,nunit)*unit_field(nu_field,nunit)
-    enddo
-
-    ! sum mass recursively up the tree
-    do ne=num_elems,2,-1 ! not for the stem branch; parent = 0
-       ne0=elem_cnct(-1,1,ne)
-       tree_mass(ne0) = tree_mass(ne0) + DBLE(elem_symmetry(ne))*tree_mass(ne)
-    enddo !noelem
-
-    gas_mass = tree_mass(1)
-
-    deallocate(tree_mass)
-
-    call enter_exit(sub_name,2)
-
-  end subroutine calc_mass
 
 !!!###################################################################
 
@@ -278,6 +176,7 @@ contains
     use diagnostics, only: enter_exit
     use geometry, only: volume_of_mesh
     use solve,only: pmgmres_ilu_cr
+    use species_transport, only: assemble_transport_matrix
     implicit none
 
     integer,intent(in) :: fileid,inr_itr_max,out_itr_max
@@ -336,7 +235,7 @@ contains
 
           ! assemble the element matrices. Element matrix calculation can be done directly
           ! (based on assumption of interpolation functions) or using Gaussian interpolation.
-          call assemble_gasmix(diffusion_coeff,nonzeros_unreduced)
+          call assemble_transport_matrix(diffusion_coeff,nonzeros_unreduced)
 
           ! initialise the values in the solution matrices
           global_AA(1:nonzeros) = 0.0_dp ! equivalent to M in Tawhai thesis
@@ -436,52 +335,6 @@ contains
 
   end subroutine solve_gasmix
 
-!!!########################################################################
-
-  subroutine sparse_gasmix
-    use arrays,only: elem_cnct,elem_nodes,num_elems
-
-    implicit none
-
-    integer :: n_unreduced,i,ncol,ne,ne2,np1,np2,nrow
-
-    sparsity_row(1) = 1
-    n_unreduced = 1
-
-    do ne=1,num_elems ! note using local numbering
-       if(elem_cnct(-1,0,ne).eq.0)then !at the inlet
-          np1=elem_nodes(1,ne) ! start node
-          nrow=np1
-          do i=1,2
-             np2=elem_nodes(i,ne)
-             ncol=np2
-             sparsity_col(n_unreduced)=ncol
-             n_unreduced=n_unreduced+1
-          enddo
-          sparsity_row(nrow+1)=n_unreduced
-       endif
-
-       np1=elem_nodes(2,ne) !end node
-       nrow=np1
-       do i=1,2
-          np2=elem_nodes(i,ne)
-          ncol=np2
-          sparsity_col(n_unreduced)=ncol
-          n_unreduced=n_unreduced+1
-       enddo
-       do i=1,elem_cnct(1,0,ne) ! for each child branch
-          ne2=elem_cnct(1,i,ne)
-          np2=elem_nodes(2,ne2)
-          ncol=np2
-          sparsity_col(n_unreduced)=ncol
-          n_unreduced=n_unreduced+1
-       enddo
-       sparsity_row(nrow+1)=n_unreduced
-    enddo !noelem
-
-    NonZeros_unreduced = n_unreduced - 1
-
-  end subroutine sparse_gasmix
 
 !!!####################################################################
 
