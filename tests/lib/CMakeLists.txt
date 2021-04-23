@@ -13,3 +13,4 @@ set(DIAGNOSTICS_TEST_SRCS
 add_pfunit_test(diagnostics_test ${DIAGNOSTICS_TEST_SRCS} "" "")
 # Link the test to the aether library target.
 target_link_libraries (diagnostics_test aether)
+
