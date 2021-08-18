@@ -1315,140 +1315,140 @@ contains
           Vdep(3) = Vdep(3)+pi*h*(2.0_dp*radius(0)-h)*length*dt/lduct*abs(vfluid) ! deposition with referencing to time step dt
 
 !!!! calculate deposition in acini
-!          if(num_units.gt.0.and.elem_cnct(1,0,ne).eq.0)then 
+          if(num_units.gt.0.and.elem_cnct(1,0,ne).eq.0)then 
 !!!!         call acinar_deposition(ne,current_volume,dt)
-!
-!            nunit = where_inlist(ne,units) ! get the unit number
-!            radius(0) = elem_field(ne_radius,ne)
-!
-!            ! difference of FEM-mesh and measurements (HAEFELI-BLEUER,1988)
-!            abbr(3) = radius(0) - scale_radius_acinus(part_param%RacTLC(1),current_volume)
-!            abbr(4) = 0.0_dp  ! variable to store axial position for radius scaling
-!
-!            veloc(0) = elem_field(ne_part_vel,ne)/pi/radius(0)**2.0_dp ! velocity terminal bronchi
-!            deltaV(-1) = dt*elem_field(ne_Vdot,ne) ! total volume change of acinus in one time step
-!            deltaV(0) = 0.0_dp ! assumption that volume change very small since no alveoli
-!            crossec(0) = radius(0)**2.0_dp*pi ! cross-sectional area of terminal bronchiole in FEM model  
-!
-!            do gen = 1,9 ! loop over acinar generations - deposition efficiency the same in all gens
-!               abbr(4) = abbr(4)+part_param%LacTLC(gen+1) ! axial position of node
-!
-!               ! scale duct radius wrt. current acinar volume and linear scaling to adapt HBW to FEM mesh
-!               radius(gen) = (part_param%totacinarLength-abbr(4)) &
-!                              /part_param%totacinarLength*abbr(3)+ &
-!                             scale_radius_acinus(part_param%RacTLC(gen+1),current_volume)
-!               crossec(gen) = pi*radius(gen)**2.0_dp*(2.0_dp**gen) ! accumulated duct cross-sectional area 
-!               Vduct(gen) = crossec(gen)*part_param%LacTLC(gen+1) ! duct volume in acinar region
-!
-!               ! linear scaling of alveolar volume - can become negative!!
-!               volume(gen) = max(part_param%VacTLC(gen) &
-!                             /part_param%VtotTLC*unit_field(nu_vol,nunit)-Vduct(gen),0.0_dp)
-!               part_acinus_old(gen) = part_acinus_field(1+gen,nunit)
-!                
-!!!!.............diffusion in alveolar tissue
-!               abbr(5) = 0.0_dp
-!               abbr(6) = 0.0_dp
-!               flag = .true.
-!               j = 1
-!!              do j = 1,maxi
-!               do while(flag)
-!                   abbr_t1 = abbr(5)
-!                   abbr_t2 = abbr(6)
-!                   abbr(5) = abbr(5)+coeffDiffSph(j,1)*exp(coeffDiffSph(j,2)*part_acinus_field(10+gen,nunit))
-!                   abbr(6) = abbr(6)+coeffDiffSph(j,1)*exp(coeffDiffSph(j,2)*(part_acinus_field(10+gen,nunit)+dt))
-!                   if((abs(abbr_t1-abbr(5)).lt.1.0e-8_dp).and.(abs(abbr_t2-abbr(6)).lt.1.0e-8_dp)) flag = .false.
-!                   if(j.ge.maxi) flag = .false.
-!                   j = j + 1
-!                enddo !j
-!
-!                if((abbr(6).gt.0.0_dp).and.(abbr(5).gt.abbr(6)))then ! can become zero for large T (accuracy of real*8)
-!                   ! diffusion fraction out of a sphere (Diffusion,Jost,1960) (0.853d0 is area correction ChoiKim2007)
-!                   DepFrac(4) = 1.0_dp-abbr(6)/abbr(5)*0.853_dp
-!                else
-!                   DepFrac(4) = 0.0_dp
-!                endif
+
+            nunit = where_inlist(ne,units) ! get the unit number
+            radius(0) = elem_field(ne_radius,ne)
+
+            ! difference of FEM-mesh and measurements (HAEFELI-BLEUER,1988)
+            abbr(3) = radius(0) - scale_radius_acinus(part_param%RacTLC(1),current_volume)
+            abbr(4) = 0.0_dp  ! variable to store axial position for radius scaling
+
+            veloc(0) = elem_field(ne_part_vel,ne)/pi/radius(0)**2.0_dp ! velocity terminal bronchi
+            deltaV(-1) = dt*elem_field(ne_Vdot,ne) ! total volume change of acinus in one time step
+            deltaV(0) = 0.0_dp ! assumption that volume change very small since no alveoli
+            crossec(0) = radius(0)**2.0_dp*pi ! cross-sectional area of terminal bronchiole in FEM model  
+
+            do gen = 1,9 ! loop over acinar generations - deposition efficiency the same in all gens
+               abbr(4) = abbr(4)+part_param%LacTLC(gen+1) ! axial position of node
+
+               ! scale duct radius wrt. current acinar volume and linear scaling to adapt HBW to FEM mesh
+               radius(gen) = (part_param%totacinarLength-abbr(4)) &
+                              /part_param%totacinarLength*abbr(3)+ &
+                             scale_radius_acinus(part_param%RacTLC(gen+1),current_volume)
+               crossec(gen) = pi*radius(gen)**2.0_dp*(2.0_dp**gen) ! accumulated duct cross-sectional area 
+               Vduct(gen) = crossec(gen)*part_param%LacTLC(gen+1) ! duct volume in acinar region
+
+               ! linear scaling of alveolar volume - can become negative!!
+               volume(gen) = max(part_param%VacTLC(gen) &
+                             /part_param%VtotTLC*unit_field(nu_vol,nunit)-Vduct(gen),0.0_dp)
+               part_acinus_old(gen) = part_acinus_field(1+gen,nunit)
+                
+!!!.............diffusion in alveolar tissue
+               abbr(5) = 0.0_dp
+               abbr(6) = 0.0_dp
+               flag = .true.
+               j = 1
+!              do j = 1,maxi
+               do while(flag)
+                   abbr_t1 = abbr(5)
+                   abbr_t2 = abbr(6)
+                   abbr(5) = abbr(5)+coeffDiffSph(j,1)*exp(coeffDiffSph(j,2)*part_acinus_field(10+gen,nunit))
+                   abbr(6) = abbr(6)+coeffDiffSph(j,1)*exp(coeffDiffSph(j,2)*(part_acinus_field(10+gen,nunit)+dt))
+                   if((abs(abbr_t1-abbr(5)).lt.1.0e-8_dp).and.(abs(abbr_t2-abbr(6)).lt.1.0e-8_dp)) flag = .false.
+                   if(j.ge.maxi) flag = .false.
+                   j = j + 1
+                enddo !j
+
+                if((abbr(6).gt.0.0_dp).and.(abbr(5).gt.abbr(6)))then ! can become zero for large T (accuracy of real*8)
+                   ! diffusion fraction out of a sphere (Diffusion,Jost,1960) (0.853d0 is area correction ChoiKim2007)
+                   DepFrac(4) = 1.0_dp-abbr(6)/abbr(5)*0.853_dp
+                else
+                   DepFrac(4) = 0.0_dp
+                endif
 
 
 !!!!............ sedimentation in alveolar tissue
-!                ! deposition fraction due to sedimentation (0.853d0 is area correction ChoiKim2007) 
-!                DepFrac(5) = part_param%prho &
-!                             *part_param%gravityy &
-!                             *part_param%pdia**2.0_dp &
-!                             *dt/12.0_dp/part_param%mu/Dalv*0.853_dp   
+                ! deposition fraction due to sedimentation (0.853d0 is area correction ChoiKim2007) 
+                DepFrac(5) = part_param%prho &
+                             *part_param%gravityy &
+                             *part_param%pdia**2.0_dp &
+                             *dt/12.0_dp/part_param%mu/Dalv*0.853_dp   
+
+                ! sum deposition fractions without mutually eliminating part
+                DepFrac(6) = DepFrac(4)/2.0_dp+DepFrac(5)+DMAX1(DepFrac(4)/2.0_dp-DepFrac(5),0.0_dp)
+                do j = 4,6
+                  if(DepFrac(j).ge.0.2_dp)then
+                    if(DepFrac(j).gt.1.0_dp) DepFrac(j) = 1.0_dp ! check if deposition volume extends volume in Acinus 
+                   endif
+                enddo !j
+       
+                if(gen.ge.1)THEN ! by increasing number, deposition in tubes can be taken into account
+                  Vdep(4:6) = 0.0_dp
+                  Vdep(5) = 0.0_dp
+                else
+                ! volume change each generation within on time step
+                deltaV(gen) = part_param%VacTLC(gen)/part_param%VtotTLC*deltaV(-1) 
+
+                ! velocities in acinar generations
+                veloc(gen) = (veloc(gen-1)*crossec(gen-1)-deltaV(gen-1)/dt)/crossec(gen) 
 !
-!                ! sum deposition fractions without mutually eliminating part
-!                DepFrac(6) = DepFrac(4)/2.0_dp+DepFrac(5)+DMAX1(DepFrac(4)/2.0_dp-DepFrac(5),0.0_dp)
-!                do j = 4,6
-!                  if(DepFrac(j).ge.0.2_dp)then
-!                    if(DepFrac(j).gt.1.0_dp) DepFrac(j) = 1.0_dp ! check if deposition volume extends volume in Acinus 
-!                   endif
-!                enddo !j
-!       
-!                if(gen.ge.1)THEN ! by increasing number, deposition in tubes can be taken into account
-!                  Vdep(4:6) = 0.0_dp
-!                  Vdep(5) = 0.0_dp
-!                else
-!                ! volume change each generation within on time step
-!                deltaV(gen) = part_param%VacTLC(gen)/part_param%VtotTLC*deltaV(-1) 
-!
-!                ! velocities in acinar generations
-!                veloc(gen) = (veloc(gen-1)*crossec(gen-1)-deltaV(gen-1)/dt)/crossec(gen) 
-!
-!                !! Sedimentation in ducts
-!                ! deposition volume due to sedimentation (statistic orientation to gravity)
-!                Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
-!                          *part_param%prho &
-!                          *part_param%gravityy &
-!                          *part_param%pdia**2.0_dp &
-!                          *part_param%LacTLC(gen+1)*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun 
-!
-!                !!Brownian diffusion (average travelling distance within duct)
-!                h = 2.0_dp/3.0_dp*(4.0_dp*part_param%diffu*part_param%LacTLC(gen+1)&
-!                                  /abs(veloc(gen)))**0.5_dp/pi 
-!
-!                if(h.gt.radius(gen))then ! all particles are deposited
-!                   Vdep(4) = Vduct(gen)
-!                   Vdep(6) = Vduct(gen)
-!                else
-!                  ! deposition with referencing to time step DT
-!                  Vdep(4) = pi*h*(2.0_dp*radius(gen)-h)*dt*abs(veloc(gen))*2.0_dp**gen 
-!                    
-!                  !!Total alveolar deposition
-!                  ! sum deposition volumes without mutually eliminating volume
-!                  Vdep(6) = Vdep(4)/2.0_dp+Vdep(5)+DMAX1(Vdep(4)/2.0_dp-Vdep(5),0.0_dp)
-!                endif
+                !! Sedimentation in ducts
+                ! deposition volume due to sedimentation (statistic orientation to gravity)
+                Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
+                          *part_param%prho &
+                          *part_param%gravityy &
+                          *part_param%pdia**2.0_dp &
+                          *part_param%LacTLC(gen+1)*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun 
+
+                !!Brownian diffusion (average travelling distance within duct)
+                h = 2.0_dp/3.0_dp*(4.0_dp*part_param%diffu*part_param%LacTLC(gen+1)&
+                                  /abs(veloc(gen)))**0.5_dp/pi 
+
+                if(h.gt.radius(gen))then ! all particles are deposited
+                   Vdep(4) = Vduct(gen)
+                   Vdep(6) = Vduct(gen)
+                else
+                  ! deposition with referencing to time step DT
+                  Vdep(4) = pi*h*(2.0_dp*radius(gen)-h)*dt*abs(veloc(gen))*2.0_dp**gen 
+                    
+                  !!Total alveolar deposition
+                  ! sum deposition volumes without mutually eliminating volume
+                  Vdep(6) = Vdep(4)/2.0_dp+Vdep(5)+DMAX1(Vdep(4)/2.0_dp-Vdep(5),0.0_dp)
+                endif
 !                   
-!                 do j = 4,6
-!                    if(Vdep(j).gt.(0.2_dp*Vduct(gen)))then
-!
-!                      ! check if deposition volume extends volume in Acinus
-!                      if(Vdep(j).gt.Vduct(gen)) Vdep(j)=Vduct(gen) 
-!                    endif
-!                    if(Vdep(j).ne.Vdep(j)) Vdep(j) = 0.0_dp ! function ISNAN does not work
-!                  enddo !j
-!                endif !gen.LT.9
-!       
-!                if(part_acinus_field(1+gen,nunit).ge.0.0_dp)then
-!                   ! NOTHING because thsi way NaN values are covered too
-!                else
-!                   part_acinus_field(1+gen,nunit) = 0.0_dp
-!                endif
-!                ! for deposition in the alveolar tissue the radial concentration profile is approximated by taking the next generation
-!                node_field(nj_loss,np) = node_field(nj_loss,np)+Vdep(6)*part_acinus_field(1+gen,nunit)+volume(gen)* &
-!                     DepFrac(6)*part_acinus_field(MIN(gen+2,10),nunit) ! store deposition quantity (mass in [g])
-!                node_field(nj_loss_dif,np) = node_field(nj_loss_dif,np)+Vdep(4)*part_acinus_field(1+gen,nunit)+volume(gen)* &
-!                     DepFrac(4)*part_acinus_field(MIN(gen+2,10),nunit) ! store diffusion quantity (mass in [g])
-!                node_field(nj_loss_sed,np) = node_field(nj_loss_sed,np)+Vdep(5)*part_acinus_field(1+gen,nunit)+volume(gen)* &
-!                     DepFrac(5)*part_acinus_field(MIN(gen+2,10),nunit) ! store sedimentaion quantity (mass in [g])
-!                part_acinus_field(1+gen,nunit) = part_acinus_field(1+gen,nunit)-volume(gen)*DepFrac(6)/(volume(gen)+Vduct(gen)) &
-!                     *part_acinus_field(MIN(gen+2,10),nunit)-Vdep(6)/(volume(gen)+Vduct(gen))*part_acinus_field(1+gen,nunit) ! assign new concentration acini
-!                if(part_acinus_field(1+gen,nunit).gt.0.0_dp)then
-!                   part_acinus_field(10+gen,nunit) = part_acinus_field(10+gen,nunit)+dt ! increase time particles spent in alveoli (in BBM(11..19,ne))
-!                else
-!                   part_acinus_field(10+gen,nunit) = 0 ! avoid division by zero
-!                endif   ! part_acinus_field
-!             enddo      ! for nine assumed acinar generations 
-!          endif         ! if a terminal element with acini attached
+                 do j = 4,6
+                    if(Vdep(j).gt.(0.2_dp*Vduct(gen)))then
+
+                      ! check if deposition volume extends volume in Acinus
+                      if(Vdep(j).gt.Vduct(gen)) Vdep(j)=Vduct(gen) 
+                    endif
+                    if(Vdep(j).ne.Vdep(j)) Vdep(j) = 0.0_dp ! function ISNAN does not work
+                  enddo !j
+                endif !gen.LT.9
+       
+                if(part_acinus_field(1+gen,nunit).ge.0.0_dp)then
+                   ! NOTHING because thsi way NaN values are covered too
+                else
+                   part_acinus_field(1+gen,nunit) = 0.0_dp
+                endif
+                ! for deposition in the alveolar tissue the radial concentration profile is approximated by taking the next generation
+                node_field(nj_loss,np) = node_field(nj_loss,np)+Vdep(6)*part_acinus_field(1+gen,nunit)+volume(gen)* &
+                     DepFrac(6)*part_acinus_field(MIN(gen+2,10),nunit) ! store deposition quantity (mass in [g])
+                node_field(nj_loss_dif,np) = node_field(nj_loss_dif,np)+Vdep(4)*part_acinus_field(1+gen,nunit)+volume(gen)* &
+                     DepFrac(4)*part_acinus_field(MIN(gen+2,10),nunit) ! store diffusion quantity (mass in [g])
+                node_field(nj_loss_sed,np) = node_field(nj_loss_sed,np)+Vdep(5)*part_acinus_field(1+gen,nunit)+volume(gen)* &
+                     DepFrac(5)*part_acinus_field(MIN(gen+2,10),nunit) ! store sedimentaion quantity (mass in [g])
+                part_acinus_field(1+gen,nunit) = part_acinus_field(1+gen,nunit)-volume(gen)*DepFrac(6)/(volume(gen)+Vduct(gen)) &
+                     *part_acinus_field(MIN(gen+2,10),nunit)-Vdep(6)/(volume(gen)+Vduct(gen))*part_acinus_field(1+gen,nunit) ! assign new concentration acini
+                if(part_acinus_field(1+gen,nunit).gt.0.0_dp)then
+                   part_acinus_field(10+gen,nunit) = part_acinus_field(10+gen,nunit)+dt ! increase time particles spent in alveoli (in BBM(11..19,ne))
+                else
+                   part_acinus_field(10+gen,nunit) = 0 ! avoid division by zero
+                endif   ! part_acinus_field
+             enddo      ! for nine assumed acinar generations 
+          endif         ! if a terminal element with acini attached
        enddo            ! np
 
        !!! summation of all deposition effects
