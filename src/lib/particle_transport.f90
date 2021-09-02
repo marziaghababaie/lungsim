@@ -84,7 +84,7 @@ contains
     call initialise_transport(initial_concentration,inlet_concentration,tp)
     
     !Set up parameters, NB any of these parameters could be passed from python in the long term
-    part_param%num_brths_gm = 23
+    part_param%num_brths_gm = 23!TJ TEMP 23
     part_param%solve_tolerance = 1.0e-8_dp
     part_param%diffusion_coeff = 22.5_dp
     part_param%pdia = 0.4e-5_dp
@@ -152,7 +152,7 @@ contains
     write(*,'('' Total lung volume    = '',F8.3,'' L'')') part_param%initial_volume/1.0e+6_dp !in L
 
      op_name = 'file_particle' !ARC TEMP placeholder
-     print *, 'op_name is', op_name	
+    ! print *, 'op_name is', op_name
      
 
 
@@ -180,21 +180,26 @@ contains
     time = 0.0_dp
 
 !###########################################################
-    do nbreath = 1,1!ARC TEMP part_param%num_brths_gm
+    do nbreath = 1, part_param%num_brths_gm!1!ARC TEMP
 !###########################################################
 
 !!! Inspiration
      inlet_flow = abs(elem_field(ne_Vdot,1))
      call scale_flow_field(inlet_flow)
-     time_start = time_end
-     time_end = time_start + part_param%time_inspiration
-     time_end = 0.1_dp
+
+     time_start = time_start + time_end
+     time_end = 0.05_dp!0.1_dp
+     ! ----------------- origin -----------------
+!     time_start = time_end
+!     time_end = time_start + part_param%time_inspiration
+!     time_end = 0.1_dp
+     ! ------------------------------------------
      node_field(nj_conc1,1) = tp%inlet_concentration(1) ! need to set here
      call solve_particles(fileid,time_end,time_start,.true.,last_breath,tp,part_param)
      nstep = nbreath
-     write(*,*) 'nstep',nstep
-
-
+!     write(*,*) 'nstep',nstep
+!
+!
 !!! Breath Hold
 !!----------------
 !     if(part_param%time_breath_hold.gt.0.0_dp)then
@@ -296,7 +301,7 @@ contains
        part_acinus_field(:,:) = 0.0_dp
     endif
     
-    !pARC article acinus field, should be a 'unit field'
+    !ARC particle acinus field, should be a 'unit field'
 
     inlet_flow = elem_field(ne_Vdot,1) ! flow at entry element
     theta = 2.0_dp/3.0_dp
@@ -393,11 +398,13 @@ contains
 
        ! estimate the volume and mass errors
        call calc_mass_particles(nj_conc1,nu_conc1,current_mass,mass_deposit)
-       
-       tp%ideal_mass = tp%ideal_mass + inlet_flow*dt*node_field(nj_conc1,1)       
+
+       tp%ideal_mass = tp%ideal_mass + inlet_flow*dt*node_field(nj_conc1,1)
        volume_error = 1.0e+2_dp*(current_volume - (part_param%initial_volume +&
             tp%total_volume_change))/(part_param%initial_volume + tp%total_volume_change)
-       write(*,*) 'masses',tp%ideal_mass, current_mass, mass_deposit
+       !print *, 'inlet concentration', node_field(nj_conc1,1)
+       !write(*,*) 'masses',tp%ideal_mass, current_mass, mass_deposit
+
        if(tp%ideal_mass.gt.0.0_dp)then
           mass_error = 1.0e+2_dp*(current_mass + mass_deposit - tp%ideal_mass)/tp%ideal_mass
        else
@@ -1197,7 +1204,7 @@ contains
 !!! Copy particle 'concentration' solution to temporary array
     part_concentration(:) = node_field(nj_conc1,:)
     
-    write(*,*) 'part', part_concentration(1)
+    !write(*,*) 'part', part_concentration(1)
     
       
 !!! TLC volume-dependent average diameter of an alveolus (Weibel, 1962) 
@@ -1457,9 +1464,9 @@ contains
        ! add impaction with correction term
        Vdep(0) = Vdep(0) + Vdep(2) - Vdep(0) * Vdep(2)/Vtot   
        
-       if(Vdep(0).gt.Vtot)then
-         write(*,*) np,Vdep(0),Vdep(1),Vdep(2), Vdep(3),Vtot  
-      endif   
+!       if(Vdep(0).gt.Vtot)then
+!         write(*,*) np,Vdep(0),Vdep(1),Vdep(2), Vdep(3),Vtot
+!      endif
 
        !!! store the deposition quantities of each type
        node_field(nj_loss,np) = node_field(nj_loss,np)+Vdep(0)*part_concentration(np) ! deposition quantity [g]
@@ -1474,7 +1481,7 @@ contains
     
 !!! copy nj_source (concentration - deposition) field to nj_conc1 field
     node_field(nj_conc1,:) = part_concentration(:)
-    write(*,*) 'part2', part_concentration(1)
+    !write(*,*) 'part2', part_concentration(1)
 
     deallocate(part_concentration)
 
@@ -1723,6 +1730,9 @@ contains
     mass_by_gen = 0.0_dp
     vol_by_gen = 0.0_dp
 
+    !print *, 'num_elems', num_elems !61360
+    !print *, 'num_units',num_units ! 30676
+
     ! initialise to the mass in each element
     do ne = 1,num_elems
        np1 = elem_nodes(1,ne)
@@ -1736,7 +1746,8 @@ contains
        vol_by_gen(ngen) = vol_by_gen(ngen) + elem_field(ne_vol,ne)
     enddo
     nmax_gen = maxval(elem_ordrs(1,:))
-    
+    !print *, 'nmax_gen', nmax_gen ! 27
+
     ! add the mass in each elastic unit to terminal elements
     do nunit = 1,num_units
        ne = units(nunit)
@@ -1745,7 +1756,7 @@ contains
        unit_tree_mass(ne) = unit_tree_mass(ne) + &
                unit_field(nu_vol,nunit)*unit_field(nu_field,nunit)
     enddo
-    
+    !print *,'nu_field', SUM(unit_field(nu_field,:))
     ! sum mass recursively up the tree
     do ne = num_elems,2,-1 ! not for the stem branch; parent = 0
        ne0 = elem_cnct(-1,1,ne)
@@ -1756,12 +1767,13 @@ contains
     enddo !noelem
 
     gas_mass = tree_mass(1)
-    write(*,*) 'gas mass', gas_mass
+    !print *, 'tree mass', size(tree_mass) = 61361
+    !write(*,*) 'gas mass', gas_mass
     deposit_mass = wall_mass(1)
-    write(*,*) 'deposit mass', deposit_mass
+    !write(*,*) 'deposit mass', deposit_mass
     
-    write(*,'('' Mass in generations: '',10(f12.4),'' |'',f12.4)') (mass_by_gen(i),i=1,10),unit_tree_mass(1)
-    write(*,'(''  Vol in generations: '',10(f12.4))') (vol_by_gen(i),i=1,10)
+    !write(*,'('' Mass in generations: '',10(f12.4),'' |'',f12.4)') (mass_by_gen(i),i=1,10),unit_tree_mass(1)
+    !write(*,'(''  Vol in generations: '',10(f12.4))') (vol_by_gen(i),i=1,10)
     
     deallocate(tree_mass)
     deallocate(unit_tree_mass)

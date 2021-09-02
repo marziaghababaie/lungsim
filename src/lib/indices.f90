@@ -51,34 +51,34 @@ module indices
   !model type
   character(len=60) :: model_type
 
-public num_ord,no_gen,no_hord,no_sord
+  public num_ord,no_gen,no_hord,no_sord
 
-public num_nj,nj_aw_press,nj_bv_press,nj_conc1,nj_conc2
+  public num_nj,nj_aw_press,nj_bv_press,nj_conc1,nj_conc2
 
-public num_ne,ne_radius,ne_length,ne_vol,&
+  public num_ne,ne_radius,ne_length,ne_vol,&
       ne_resist,ne_t_resist,ne_Vdot,ne_Vdot0,ne_a_A,&
       ne_dvdt,ne_radius_in,ne_radius_in0,ne_radius_out,&
       ne_radius_out0,ne_group,ne_Qdot
 
-public num_nu,nu_vol,nu_comp, nu_conc2,nu_Vdot0,nu_Vdot1, &
+  public num_nu,nu_vol,nu_comp, nu_conc2,nu_Vdot0,nu_Vdot1, &
        nu_Vdot2,nu_dpdt,nu_pe,nu_vt,nu_air_press,&
        nu_conc1,nu_vent,nu_vd,&
        nu_perf,nu_blood_press
 
-public num_gx, ng_p_alv_o2,ng_p_alv_co2,ng_p_ven_o2,ng_p_ven_co2, &
+  public num_gx, ng_p_alv_o2,ng_p_alv_co2,ng_p_ven_o2,ng_p_ven_co2, &
        ng_p_cap_o2, ng_p_cap_co2,ng_source_o2,ng_source_co2, &
        ng_Vc, ng_sa, ng_tt, ng_time
        
 ! TEMP ARC INDICES FOr particle transport, to be merged
-public nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
+  public nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
        ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0,nj_conc3
 
 
-public model_type
+  public model_type
 
 !Interfaces
-private
-public define_problem_type,ventilation_indices, perfusion_indices, get_ne_radius, get_nj_conc1, &
+  private
+  public define_problem_type,ventilation_indices, perfusion_indices, get_ne_radius, get_nj_conc1, &
        growing_indices,particle_indices
 
 contains
@@ -283,7 +283,7 @@ contains
     call enter_exit(sub_name,1)
     ! indices for node_field
     num_nj=9
-    nj_conc1=2
+    nj_conc1=2 ! inlet concentration
     nj_conc2=3
     nj_conc3 =4
     !added for DPI calc, HBK, Aug 2018
