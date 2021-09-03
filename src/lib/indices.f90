@@ -34,6 +34,10 @@ module indices
        nu_Vdot2=0,nu_dpdt=0,nu_pe=0,nu_vt=0,nu_air_press=0,nu_conc1=0,nu_vent=0,&
        nu_vd=0,nu_perf=0,nu_blood_press=0
   !indices for gas exchange field
+  ! TEMP ARC INDICES FOr particle transport, to be merged
+   integer ::  nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
+   ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0,nj_conc3
+  
   ! indices for gasex_field
   integer,parameter :: num_gx = 12
   integer,parameter :: ng_p_alv_o2=1      ! index for alveolar partial pressure of O2
@@ -66,19 +70,23 @@ module indices
        nu_Vdot2,nu_dpdt,nu_pe,nu_vt,nu_air_press,&
        nu_conc1,nu_vent,nu_vd,&
        nu_perf,nu_blood_press
-  
+
   public num_gx, ng_p_alv_o2,ng_p_alv_co2,ng_p_ven_o2,ng_p_ven_co2, &
        ng_p_cap_o2, ng_p_cap_co2,ng_source_o2,ng_source_co2, &
        ng_Vc, ng_sa, ng_tt, ng_time
-  
-  
+       
+! TEMP ARC INDICES FOr particle transport, to be merged
+  public nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
+       ne_part_vel, ne_flow, nu_conc3,nu_flow0, nu_flow1,  nu_dpdt_0,nj_conc3
+
+
   public model_type
-  
-  !Interfaces
+
+!Interfaces
   private
   public define_problem_type,ventilation_indices, perfusion_indices, get_ne_radius, get_nj_conc1, &
-       growing_indices
-  
+       growing_indices,particle_indices
+
 contains
   
   !> Define problem type
@@ -93,23 +101,29 @@ contains
     call enter_exit(sub_name,1)
     select case (PROBLEM_TYPE)
     case ('gas_exchange')
-       print *, 'You are solving a gas exchange model, setting up indices'
+       print *, 'You are solving a gas exchange model, setting up'
        call exchange_indices
     case ('gas_mix')
-       print *, 'You are solving a gas mixing model, setting up indices'
+       print *, 'You are solving a gas mixing model, setting up'
        call gasmix_indices
     case ('gas_transfer')
-       print *, 'You are solving a gas transfer model, setting up indices'
+       print *, 'You are solving a gas transfer model, setting up'
        call exchange_indices
     case ('perfusion')
-       print *, 'You are solving a static perfusion model, setting up indices'
+       print *, 'You are solving a static perfusion model, setting up'
        call perfusion_indices
     case ('ventilation')
-       print *, 'You are solving a ventilation model, setting up indices'
+       print *, 'You are solving a ventilation model, setting up'
        call ventilation_indices
     case('grow_tree')
-       print *, 'You are solving a growing problem, setting up indices'
+       print *, 'You are solving a growing problem, setting up'
        call growing_indices
+    case('particle_transport')
+       print*, 'You are solving a particle transport problem, setting up'
+       call particle_indices
+    case DEFAULT
+       print*, 'The selected problem type does not exist, exiting'
+       stop
     end select
     model_type=TRIM(PROBLEM_TYPE)
     call enter_exit(sub_name,2)
@@ -265,10 +279,65 @@ contains
     call enter_exit(sub_name,2)
     
   end subroutine growing_indices
-  !
-  !######################################################################
-  !
-  !> Perfusion indices
+!
+!######################################################################
+!
+!> Particle indices
+  subroutine particle_indices
+  !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_PARTICLE_INDICES" :: PARTICLEINDICES
+    use diagnostics, only: enter_exit
+    implicit none
+    character(len=60) :: sub_name
+
+    sub_name = 'particle_indices'
+    call enter_exit(sub_name,1)
+    ! indices for node_field
+    num_nj=9
+    nj_conc1=2 ! inlet concentration
+    nj_conc2=3
+    nj_conc3 =4
+    !added for DPI calc, HBK, Aug 2018
+    nj_mass=5
+    nj_loss=6
+    nj_loss_dif=7
+    nj_loss_sed=8
+    nj_loss_imp=9
+    
+    ! indices for elem_field
+    num_ne=10
+    ne_radius=1
+    ne_length=2
+    ne_vol=3
+    ne_resist=4
+    ne_Vdot=5
+    ne_Qdot=6
+    ne_dvdt=7
+    ne_A_a = 8
+    ne_mass = 9  ! encountered in part calc, HKSep6'18
+    ne_part_vel = 10
+
+    ! indices for unit_field
+    num_nu=9
+    nu_vol=1 !volume of unit
+    nu_comp=2
+    nu_Vdot0=3 !flow in unit
+    nu_vd=4
+    nu_perf=5
+    nu_conc1=6 ! conc in unit
+    nu_conc2=7
+    nu_conc3=8 !ARC - again, why does this not meet convention??
+    !added for DPI calc, HBK, Aug 2018
+    nu_dpdt_0 = 9
+    
+    
+    call enter_exit(sub_name,2)
+  end subroutine particle_indices
+  
+
+!
+!######################################################################
+!
+!> Perfusion indices
   subroutine perfusion_indices
     !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_PERFUSION_INDICES" :: PERFUSION_INDICES
     

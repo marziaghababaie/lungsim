@@ -24,7 +24,7 @@ module gas_exchange
 
   !Interfaces
   private 
-  public initial_gasexchange,steadystate_gasexchange
+  public solve_ss_gasexchange
 
   real(dp),parameter :: standard_molar_vol = 22.4136e+3_dp ! at STP; mm^3/mmol
   real(dp),parameter :: p_water = 47.0_dp !mmHg
@@ -62,6 +62,7 @@ module gas_exchange
   !  c_ven_co2 ! mixed venous content of CO2 (CvCO2)
 
 contains
+
 !
 !##############################################################################
 !
@@ -130,10 +131,14 @@ contains
 !
 !###########################################################################################
 !
- subroutine steadystate_gasexchange(c_art_o2,c_ven_o2,&
+ subroutine solve_ss_gasexchange(c_art_o2,c_ven_o2,&
        p_art_co2,p_art_o2,p_i_o2,p_ven_co2,p_ven_o2,shunt_fraction,&
        VCO2,VO2)
- !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_STEADYSTATE_GASEXCHANGE" :: STEADYSTATE_GASEXCHANGE
+ !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_SOLVE_SS_GASEEXCHANGE :: SOLVE_SS_GASEXCHANGE
+    use arrays,only: dp,elem_field,num_units,gasex_field,node_field,units,unit_field,&
+         elem_units_below,elem_nodes
+    use indices
+    use diagnostics, only:enter_exit
 
 !!! Parameter List
     real(dp),intent(in) :: p_i_o2,shunt_fraction,VCO2,VO2
@@ -149,7 +154,7 @@ contains
     logical :: continue
     character(len=60) :: sub_name
 
-    sub_name = 'steadystate_gasexchange'
+    sub_name = 'solve_ss_gasexchange'
     call enter_exit(sub_name,1)
 
 
@@ -362,7 +367,7 @@ contains
 
     call enter_exit(sub_name,2)
 
-  end subroutine steadystate_gasexchange
+  end subroutine solve_ss_gasexchange
 
   !!! ####################################################
 

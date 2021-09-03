@@ -260,6 +260,16 @@ contains
 !!! with the advective solution as an initial condition. See Tawhai, M.H., PhD thesis for
 !!! further explanation.
 
+    use arrays,only: dp,node_field,num_nodes
+    use exports,only: export_node_field
+    use indices,only: nj_conc1,nu_conc1
+    use other_consts
+    use diagnostics, only: enter_exit
+    use geometry, only: volume_of_mesh
+    use solve,only: pmgmres_ilu_cr
+    use species_transport, only: assemble_transport_matrix
+    implicit none
+
     integer,intent(in) :: fileid,inr_itr_max,out_itr_max
     real(dp),intent(in) :: diffusion_coeff,dt,initial_volume,&
          inlet_concentration,inlet_flow,solve_tolerance,time_end,time_start
@@ -316,7 +326,7 @@ contains
 
           ! assemble the element matrices. Element matrix calculation can be done directly
           ! (based on assumption of interpolation functions) or using Gaussian interpolation.
-          call assemble_gasmix(diffusion_coeff,nonzeros_unreduced)
+          call assemble_transport_matrix(diffusion_coeff,nonzeros_unreduced)
 
           ! initialise the values in the solution matrices
           global_AA(1:nonzeros) = 0.0_dp ! equivalent to M in Tawhai thesis

@@ -77,4 +77,18 @@ contains
 
   end function get_nj_conc1_c
 
+   !> particle indices
+  subroutine particle_indices_c() bind(C, name="particle_indices_c")
+
+    use indices, only: particle_indices
+    implicit none
+
+#if defined _WIN32 && defined __INTEL_COMPILER
+    call so_particle_indices()
+#else
+    call particle_indices()
+#endif
+
+  end subroutine particle_indices_c
+
 end module indices_c

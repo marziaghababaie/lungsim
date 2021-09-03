@@ -31,6 +31,7 @@ module ventilation
   public evaluate_uniform_flow
   public two_unit_test
   public sum_elem_field_from_periphery
+  public read_params_evaluate_flow
 
   real(dp),parameter,private :: gravity = 9.81e3_dp         ! mm/s2
 !!! for air
