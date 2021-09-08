@@ -388,6 +388,26 @@ contains
 !
 !###################################################################################
 !
+
+  subroutine refine_1d_elements_c(elemlist, elemlist_len, nrefinements) bind(C, name="refine_1d_elements_c")
+    use geometry, only: refine_1d_elements
+    implicit none
+
+    integer,intent(in) :: elemlist_len
+    integer,intent(in) :: elemlist(elemlist_len)
+    integer,intent(in) :: nrefinements
+
+#if defined _WIN32 && defined __INTEL_COMPILER
+    call so_refine_1d_elements(elemlist, nrefinements)
+#else
+    call refine_1d_elements(elemlist, nrefinements)
+#endif
+
+  end subroutine refine_1d_elements_c
+  
+!
+!###################################################################################
+!
 !*volume_of_mesh:* calculates the volume of an airway mesh including conducting and respiratory airways
   subroutine volume_of_mesh_c(volume_model,volume_tree) bind(C, name="volume_of_mesh_c")
     use arrays, only: dp
