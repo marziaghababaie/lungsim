@@ -304,7 +304,7 @@ contains
     nj_loss_imp=9
     
     ! indices for elem_field
-    num_ne=10
+    num_ne=12
     ne_radius=1
     ne_length=2
     ne_vol=3
@@ -315,6 +315,8 @@ contains
     ne_A_a = 8
     ne_mass = 9  ! encountered in part calc, HKSep6'18
     ne_part_vel = 10
+    ne_vd_bel = 11
+    ne_vol_bel = 12
 
     ! indices for unit_field
     num_nu=9

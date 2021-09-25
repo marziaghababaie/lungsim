@@ -75,6 +75,7 @@ contains
     logical :: carryon
     character(len=60) :: sub_name
     logical :: last_breath = .false.
+    logical :: write_mass = .true.
     character(len=4) :: char_int
     character(len=MAX_FILENAME_LEN) :: file_export
 
@@ -86,8 +87,7 @@ contains
     !Set up parameters, NB any of these parameters could be passed from python in the long term
     part_param%num_brths_gm = 23!TJ TEMP 23
     part_param%solve_tolerance = 1.0e-8_dp
-    !part_param%diffusion_coeff = 22.5_dp
-    part_param%diffusion_coeff = 0.5_dp
+    part_param%diffusion_coeff = 22.5_dp
     part_param%pdia = 0.4e-5_dp
     part_param%dt_gm = 0.05_dp
     part_param%VtotTLC = 186.89_dp
@@ -137,7 +137,7 @@ contains
     part_param%tidal_volume = volume_target! tidal volume target, mm^3
     part_param%FRC = FRC
     part_param%initial_volume =FRC*1.0e+6_dp !initial volume of air inlungs
-    
+
     call set_elem_volume() 
     call volume_of_mesh(part_param%initial_volume,volume_tree) ! to get deadspace volume
 
@@ -173,14 +173,16 @@ contains
 
     time_end = 0.0_dp
     time_start = 0.0_dp
-       
-    write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Mass|    Dep|  volEr|  MassEr|    C_inlet'')')
-    write(*,'(''   (s)| (mL/s)|    (mL)|   (L)|         |       |   Mass|   %   |    %   |    (frac) '')')
-!    write(*,'(''  Time|   Flow|    dVol|   Vol|   Mass|    Dep|  volEr|  MassEr|    C_inlet'')')
-!    write(*,'(''   (s)|  (L/s)|     (L)|   (L)|       |   Mass|   %   |    %   |    (frac) '')')
-
     ttime = 0.0_dp
     time = 0.0_dp
+
+    if(write_mass)then
+       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Mass|    Dep|  volEr|  MassEr|    C_inlet|  Mass by gen'')')
+       write(*,'(''   (s)| (mL/s)|    (mL)|   (L)|    (.ml)|  (.ml)|   Mass|   %   |    %   |    (frac) |   (.ml)'')')
+    else
+       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Mass|    Dep|  volEr|  MassEr|    C_inlet'')')
+       write(*,'(''   (s)| (mL/s)|    (mL)|   (L)|         |       |   Mass|   %   |    %   |    (frac) '')')
+    endif
 
 !###########################################################
     !do nbreath = 1, part_param%num_brths_gm!1!ARC TEMP
@@ -199,7 +201,7 @@ contains
      ! ------------------------------------------
      node_field(nj_conc1,1) = tp%inlet_concentration(1) ! need to set here
 
-     call solve_particles(fileid,time_end,time_start,.true.,last_breath,tp,part_param)
+     call solve_particles(fileid,time_end,time_start,.true.,last_breath,tp,part_param,write_mass)
      nstep = nbreath
 !     write(*,*) 'nstep',nstep
 !
@@ -249,7 +251,7 @@ contains
 !###################################################################################
 
   subroutine solve_particles(fileid,time_end,time_start,inspiration,last_breath,&
-    tp,part_param)
+    tp,part_param,write_mass)
 
 !!! Assemble matrices for 1D particle transport, and solve. Based on the gas mixing model
 !!! with adaptations by Falko Schmidt for particles.
@@ -269,18 +271,18 @@ contains
     type(transport_parameters) :: tp
     integer,intent(in) :: fileid
     real(dp),intent(in) :: time_end,time_start
-    logical,intent(in) :: inspiration,last_breath
+    logical,intent(in) :: inspiration,last_breath,write_mass
 
     real(dp) :: err
 !   character(len=9) :: problem_type = 'particles'
     ! Local variables
     real(dp),allocatable :: solution(:)
 
-    integer :: MatrixSize,nonzeros,ncol,nentry, &
+    integer :: i,MatrixSize,nonzeros,ncol,nentry, &
          noffset_entry,noffset_row,np,nrow,nrow_BB
     real(dp) :: AA,BB,current_mass,current_volume,inlet_flow, &
-         mass_deposit,mass_error,theta,time,volume_error,volume_tree,&
-         cpu_dt_start,cpu_dt_end,temp_mass
+         mass_by_gen(50),mass_deposit,mass_error,theta,time,volume_error,volume_tree,&
+         cpu_dt_start,cpu_dt_end,temp_mass,unit_mass
 
 
     real(dp) :: Ccun
@@ -288,7 +290,7 @@ contains
     logical :: carryon
     character(len=60) :: sub_name
 
-    logical :: deposition_on = .false., diffusion_on = .false.
+    logical :: deposition_on = .true., diffusion_on = .true.
 
     integer :: SOLVER_FLAG
 
@@ -402,10 +404,11 @@ contains
              call particle_deposition(current_volume,dt,.false.,part_param)
           else
              call particle_deposition(current_volume,dt,.true.,part_param)
+             node_field(nj_conc1,1) = tp%inlet_concentration(1)
           endif
        endif
        ! estimate the volume and mass errors
-       call calc_mass_particles(nj_conc1,nu_conc1,current_mass,mass_deposit)
+       call calc_mass_particles(nj_conc1,nu_conc1,current_mass,mass_deposit,mass_by_gen,unit_mass)
 
        if(.not.deposition_on) mass_deposit = 0.0_dp
 
@@ -420,19 +423,20 @@ contains
        endif
        call cpu_time(cpu_dt_end)
        
-
-       write(*,'(f7.3,3(f8.3),f10.3,f8.3,2(f8.2),f9.2,f11.5)') &
-            time,inlet_flow/1.0e+3_dp,tp%total_volume_change/1.0e+3_dp,&
-            current_volume/1.0e+6_dp,tp%ideal_mass/1.0e+4_dp,current_mass/1.0e+4_dp,&
-            mass_deposit/1.0e+6_dp,volume_error, &
-            mass_error,node_field(nj_conc1,1)
-!       write(*,'(f7.3,4(f8.3),2(f8.2),f9.2,f11.5)') &
-!            time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
-!            current_volume/1.0e+6_dp,current_mass/1.0e+6_dp,&
-!            mass_deposit/1.0e+6_dp,volume_error, &
-       !            mass_error,node_field(nj_conc1,1)
-
-       !write(*,'(20(f8.3))') node_field(nj_conc1,1:21)
+       if(write_mass)then
+          write(*,'(f7.3,3(f8.3),f10.3,f8.3,2(f8.2),f9.2,f10.5,'' |'',16(f6.2),'' |'',f10.3)') &
+               time,inlet_flow/1.0e+3_dp,tp%total_volume_change/1.0e+3_dp,&
+               current_volume/1.0e+6_dp,tp%ideal_mass/1.0e+4_dp,current_mass/1.0e+4_dp,&
+               mass_deposit/1.0e+4_dp,volume_error, &
+               mass_error,node_field(nj_conc1,1),(mass_by_gen(i)/1.0e+3_dp,i=1,16), &
+               unit_mass/1.0e+3_dp
+       else
+          write(*,'(f7.3,3(f8.3),f10.3,f8.3,2(f8.2),f9.2,f10.5)') &
+               time,inlet_flow/1.0e+3_dp,tp%total_volume_change/1.0e+3_dp,&
+               current_volume/1.0e+6_dp,tp%ideal_mass/1.0e+4_dp,current_mass/1.0e+4_dp,&
+               mass_deposit/1.0e+6_dp,volume_error, &
+               mass_error,node_field(nj_conc1,1)
+       endif
        
        err = mass_error
 
@@ -1470,7 +1474,7 @@ contains
                 endif   ! part_acinus_field
              enddo      ! for nine assumed acinar generations 
           endif         ! if a terminal element with acini attached
-       enddo            ! np
+       enddo            ! noelem
 
        !!! summation of all deposition effects
        ! sum up diffusion and sedimentation without mutually eliminating volume
@@ -1482,15 +1486,21 @@ contains
 !         write(*,*) np,Vdep(0),Vdep(1),Vdep(2), Vdep(3),Vtot
 !      endif
 
+       if(np.lt.5)then
+          write(*,*) Vdep(0),Vtot,node_field(nj_loss,np),part_concentration(np)
+       endif
        !!! store the deposition quantities of each type
        node_field(nj_loss,np) = node_field(nj_loss,np)+Vdep(0)*part_concentration(np) ! deposition quantity [g]
        node_field(nj_loss_dif,np) = node_field(nj_loss_dif,np)+Vdep(1)*part_concentration(np) ! deposition quantity [g]
        node_field(nj_loss_sed,np) = node_field(nj_loss_sed,np)+Vdep(2)*part_concentration(np) ! deposition quantity [g]
        node_field(nj_loss_imp,np) = node_field(nj_loss_imp,np)+Vdep(3)*part_concentration(np) ! deposition quantity [g]
-       
+
+       if(np.lt.5)then
+          write(*,*) Vdep(0),part_concentration(np),(1.0_dp-Vdep(0)/Vtot)
+       endif
 !!! assign new particle concentration to all nodes
        part_concentration(np) = part_concentration(np)*(1.0_dp-Vdep(0)/Vtot)
-
+       
     enddo !np
     
 !!! copy nj_source (concentration - deposition) field to nj_conc1 field
@@ -1709,7 +1719,7 @@ contains
 
 !#########################################################################
 
-  subroutine calc_mass_particles(nj,nu_field,gas_mass,deposit_mass)
+  subroutine calc_mass_particles(nj,nu_field,gas_mass,deposit_mass,mass_by_gen,unit_mass)
     
 !   use arrays, only: dp,num_nodes,elem_nodes,node_field,elem_ordrs,&
 !                     elem_field,elem_symmetry,num_elems
@@ -1720,10 +1730,10 @@ contains
     implicit none
   
     integer,intent(in) :: nj,nu_field
-    real(dp) :: gas_mass,deposit_mass
+    real(dp) :: gas_mass,deposit_mass,mass_by_gen(:),unit_mass
     !     Local Variables
     integer :: i,ne,ne0,ngen,nmax_gen,np,np1,np2,nunit
-    real(dp) :: average_conc,mass_by_gen(50),sum_mass,vol_by_gen(50)
+    real(dp) :: average_conc,sum_mass,vol_by_gen(50)
     real(dp),allocatable :: tree_mass(:),unit_tree_mass(:),wall_mass(:),unit_wall_mass(:)
     character(len=60):: sub_name
 
@@ -1784,10 +1794,9 @@ contains
     !print *, 'tree mass', size(tree_mass) = 61361
     !write(*,*) 'gas mass', gas_mass
     deposit_mass = wall_mass(1)
+    unit_mass = unit_tree_mass(1)
     !write(*,*) 'deposit mass', deposit_mass
-    
-    write(*,'('' Mass in generations: '',16(f8.2),'' |'',f12.4)') (mass_by_gen(i)/1.0e+3_dp,i=1,16), &
-         unit_tree_mass(1)/1.0e+3_dp
+
     !write(*,'(''  Vol in generations: '',10(f12.4))') (vol_by_gen(i),i=1,10)
     
     deallocate(tree_mass)
