@@ -86,7 +86,8 @@ contains
     !Set up parameters, NB any of these parameters could be passed from python in the long term
     part_param%num_brths_gm = 23!TJ TEMP 23
     part_param%solve_tolerance = 1.0e-8_dp
-    part_param%diffusion_coeff = 22.5_dp
+    !part_param%diffusion_coeff = 22.5_dp
+    part_param%diffusion_coeff = 0.5_dp
     part_param%pdia = 0.4e-5_dp
     part_param%dt_gm = 0.05_dp
     part_param%VtotTLC = 186.89_dp
@@ -162,39 +163,42 @@ contains
      turnovers = part_param%num_brths_gm * part_param%tidal_volume / &
                  (part_param%FRC*1.0e+6_dp)
 
-     if(turnovers.lt.6.0_dp)then
-        write(*,'(''Warning:'',i3,'' breaths equals'',f5.2,'' turnovers;'// &
-           ' set num_brths_gm to'',i3,'' or enter return to continue:'')') &
-           part_param%num_brths_gm,turnovers,int(6.0_dp*(part_param%FRC*1.0e+6_dp)/&
-           part_param%tidal_volume +1.0_dp)
-        read(*,*)
-     endif
+     !if(turnovers.lt.6.0_dp)then
+     !   write(*,'(''Warning:'',i3,'' breaths equals'',f5.2,'' turnovers;'// &
+     !      ' set num_brths_gm to'',i3,'' or enter return to continue:'')') &
+     !      part_param%num_brths_gm,turnovers,int(6.0_dp*(part_param%FRC*1.0e+6_dp)/&
+     !      part_param%tidal_volume +1.0_dp)
+     !   read(*,*)
+     !endif
 
     time_end = 0.0_dp
-
+    time_start = 0.0_dp
        
-    write(*,'(''  Time|   Flow|    dVol|   Vol|   Mass|    Dep|  volEr|  MassEr|    C_inlet'')')
-    write(*,'(''   (s)|  (L/s)|     (L)|   (L)|       |   Mass|   %   |    %   |    (frac) '')')
+    write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Mass|    Dep|  volEr|  MassEr|    C_inlet'')')
+    write(*,'(''   (s)| (mL/s)|    (mL)|   (L)|         |       |   Mass|   %   |    %   |    (frac) '')')
+!    write(*,'(''  Time|   Flow|    dVol|   Vol|   Mass|    Dep|  volEr|  MassEr|    C_inlet'')')
+!    write(*,'(''   (s)|  (L/s)|     (L)|   (L)|       |   Mass|   %   |    %   |    (frac) '')')
 
     ttime = 0.0_dp
     time = 0.0_dp
 
 !###########################################################
-    do nbreath = 1, part_param%num_brths_gm!1!ARC TEMP
+    !do nbreath = 1, part_param%num_brths_gm!1!ARC TEMP
 !###########################################################
-
+       do nbreath = 1,1
 !!! Inspiration
      inlet_flow = abs(elem_field(ne_Vdot,1))
      call scale_flow_field(inlet_flow)
 
      time_start = time_start + time_end
-     time_end = 0.05_dp!0.1_dp
+     time_end = time_end + part_param%time_inspiration ! 0.05_dp!0.1_dp
      ! ----------------- origin -----------------
 !     time_start = time_end
 !     time_end = time_start + part_param%time_inspiration
 !     time_end = 0.1_dp
      ! ------------------------------------------
      node_field(nj_conc1,1) = tp%inlet_concentration(1) ! need to set here
+
      call solve_particles(fileid,time_end,time_start,.true.,last_breath,tp,part_param)
      nstep = nbreath
 !     write(*,*) 'nstep',nstep
@@ -284,6 +288,8 @@ contains
     logical :: carryon
     character(len=60) :: sub_name
 
+    logical :: deposition_on = .false., diffusion_on = .false.
+
     integer :: SOLVER_FLAG
 
     ! #############################################################################
@@ -316,8 +322,8 @@ contains
        
        call cpu_time(cpu_dt_start)
        time = time + dt ! increment time
+       if(inlet_flow.gt.0.0_dp) node_field(nj_conc1,1) = tp%inlet_concentration(1) ! reset the inlet concentration
        if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
-          if(inlet_flow.gt.0.0_dp) node_field(nj_conc1,1) = tp%inlet_concentration(1) ! set the inlet concentration
           call airway_mesh_deform(dt,part_param%initial_volume,part_param%coupled,'particles',tp,part_param) ! change model size by dV
           call general_track(dt,.true.,tp,part_param)
           call particle_velocity(dt,part_param)
@@ -361,49 +367,51 @@ contains
                   global_BB(nrow-noffset_row) + BB
           endif
        enddo
-       
-       solution(1:num_nodes) = zero_tol
-       ! Call a solver to solve the system of reduced equations. 
-       ! Here we use an iterative solver (GMRES == Generalised Minimal 
-       ! RESidual method). The solver requires the solution matrices to 
-       ! be represented in compressed row format.
-       call pmgmres_ilu_cr (MatrixSize,NonZeros,reduced_row,&
-            reduced_col,global_AA,solution,global_BB,&
-            part_param%out_itr_max,part_param%inr_itr_max,&
-            part_param%solve_tolerance,part_param%solve_tolerance,SOLVER_FLAG)
-       
-       ! transfer the solver solution (in 'Solution') to the node field array          
-       do np = 1,num_nodes
-          if(.not.inspiration.or.(inspiration.and.np.gt.1))then
-             if(inspiration)then
-                nrow_BB=np-1
-             else
-                nrow_BB=np
+
+       if(diffusion_on)then
+          solution(1:num_nodes) = zero_tol
+          ! Call a solver to solve the system of reduced equations. 
+          ! Here we use an iterative solver (GMRES == Generalised Minimal 
+          ! RESidual method). The solver requires the solution matrices to 
+          ! be represented in compressed row format.
+          call pmgmres_ilu_cr (MatrixSize,NonZeros,reduced_row,&
+               reduced_col,global_AA,solution,global_BB,&
+               part_param%out_itr_max,part_param%inr_itr_max,&
+               part_param%solve_tolerance,part_param%solve_tolerance,SOLVER_FLAG)
+          
+          ! transfer the solver solution (in 'Solution') to the node field array          
+          do np = 1,num_nodes
+             if(.not.inspiration.or.(inspiration.and.np.gt.1))then
+                if(inspiration)then
+                   nrow_BB=np-1
+                else
+                   nrow_BB=np
+                endif
+                node_field(nj_conc1,np) = node_field(nj_conc1,np) &
+                     + Solution(nrow_BB) !c^(n+1)=c^(n)+dc
+                node_field(nj_conc1,np) = max(0.0_dp,node_field(nj_conc1,np))
+                node_field(nj_conc1,np) = min(1.0_dp,node_field(nj_conc1,np))
              endif
-             node_field(nj_conc1,np) = node_field(nj_conc1,np) &
-                  + Solution(nrow_BB) !c^(n+1)=c^(n)+dc
-             node_field(nj_conc1,np) = max(0.0_dp,node_field(nj_conc1,np))
-             node_field(nj_conc1,np) = min(1.0_dp,node_field(nj_conc1,np))
-          endif
-       enddo
-       
+          enddo
+       endif
 
        call volume_of_mesh(current_volume,volume_tree)
 
-       if(inlet_flow.lt.0.0_dp)then
-          call particle_deposition(current_volume,dt,.false.,part_param)
-       else
-          call particle_deposition(current_volume,dt,.true.,part_param)
+       if(deposition_on)then
+          if(inlet_flow.lt.0.0_dp)then
+             call particle_deposition(current_volume,dt,.false.,part_param)
+          else
+             call particle_deposition(current_volume,dt,.true.,part_param)
+          endif
        endif
-
        ! estimate the volume and mass errors
        call calc_mass_particles(nj_conc1,nu_conc1,current_mass,mass_deposit)
+
+       if(.not.deposition_on) mass_deposit = 0.0_dp
 
        tp%ideal_mass = tp%ideal_mass + inlet_flow*dt*node_field(nj_conc1,1)
        volume_error = 1.0e+2_dp*(current_volume - (part_param%initial_volume +&
             tp%total_volume_change))/(part_param%initial_volume + tp%total_volume_change)
-       !print *, 'inlet concentration', node_field(nj_conc1,1)
-       !write(*,*) 'masses',tp%ideal_mass, current_mass, mass_deposit
 
        if(tp%ideal_mass.gt.0.0_dp)then
           mass_error = 1.0e+2_dp*(current_mass + mass_deposit - tp%ideal_mass)/tp%ideal_mass
@@ -413,15 +421,21 @@ contains
        call cpu_time(cpu_dt_end)
        
 
-       write(*,'(f7.3,6(f8.2),f9.2,f11.5)') &
-            time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
-            current_volume/1.0e+6_dp,current_mass/1.0e+6_dp,&
+       write(*,'(f7.3,3(f8.3),f10.3,f8.3,2(f8.2),f9.2,f11.5)') &
+            time,inlet_flow/1.0e+3_dp,tp%total_volume_change/1.0e+3_dp,&
+            current_volume/1.0e+6_dp,tp%ideal_mass/1.0e+4_dp,current_mass/1.0e+4_dp,&
             mass_deposit/1.0e+6_dp,volume_error, &
             mass_error,node_field(nj_conc1,1)
+!       write(*,'(f7.3,4(f8.3),2(f8.2),f9.2,f11.5)') &
+!            time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
+!            current_volume/1.0e+6_dp,current_mass/1.0e+6_dp,&
+!            mass_deposit/1.0e+6_dp,volume_error, &
+       !            mass_error,node_field(nj_conc1,1)
+
+       !write(*,'(20(f8.3))') node_field(nj_conc1,1:21)
        
        err = mass_error
-       
-       
+
 !      if(last_breath.and.coupled)then
        if(last_breath)then
           if(elem_field(ne_Vdot,1).lt.0.0_dp) then
@@ -1772,7 +1786,8 @@ contains
     deposit_mass = wall_mass(1)
     !write(*,*) 'deposit mass', deposit_mass
     
-    !write(*,'('' Mass in generations: '',10(f12.4),'' |'',f12.4)') (mass_by_gen(i),i=1,10),unit_tree_mass(1)
+    write(*,'('' Mass in generations: '',16(f8.2),'' |'',f12.4)') (mass_by_gen(i)/1.0e+3_dp,i=1,16), &
+         unit_tree_mass(1)/1.0e+3_dp
     !write(*,'(''  Vol in generations: '',10(f12.4))') (vol_by_gen(i),i=1,10)
     
     deallocate(tree_mass)

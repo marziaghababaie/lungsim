@@ -22,6 +22,7 @@ void define_rad_from_geom_c(const char *order_system, int *order_system_len, dou
                             const char *group_type, int *group_type_len, const char *group_options, int *group_options_len);
 void element_connectivity_1d_c(void);
 void evaluate_ordering_c(void);
+void reorder_tree_c();
 void refine_1d_elements_c(int *elemlist_len, int elemlist[], int *nrefinements);
 void set_initial_volume_c(int *Gdirn, double *COV, double *total_volume, double *Rmax, double *Rmin);
 void volume_of_mesh_c(double *volume_model, double *volume_tree);
@@ -132,6 +133,11 @@ void element_connectivity_1d()
 void evaluate_ordering()
 {
   evaluate_ordering_c();
+}
+
+void reorder_tree()
+{
+  reorder_tree_c();
 }
 
 void refine_1d_elements(int elemlist_len, int elemlist[], int nrefinements)

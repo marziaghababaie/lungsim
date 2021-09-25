@@ -388,8 +388,22 @@ contains
 !
 !###################################################################################
 !
+  subroutine reorder_tree_c() bind(C, name="reorder_tree_c")
+    use geometry,only: reorder_tree
+    implicit none
 
-  subroutine refine_1d_elements_c(elemlist, elemlist_len, nrefinements) bind(C, name="refine_1d_elements_c")
+#if defined _WIN32 && defined __INTEL_COMPILER
+    call so_reorder_tree()
+#else
+    call reorder_tree()
+#endif
+    
+  end subroutine reorder_tree_c
+!
+!###################################################################################
+!
+
+  subroutine refine_1d_elements_c(elemlist_len, elemlist, nrefinements) bind(C, name="refine_1d_elements_c")
     use geometry, only: refine_1d_elements
     implicit none
 

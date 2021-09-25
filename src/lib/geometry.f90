@@ -48,6 +48,7 @@ module geometry
   public make_2d_vessel_from_1d
   public reallocate_node_elem_arrays
   public refine_1d_elements
+  public reorder_tree
   public set_initial_volume
   public triangles_from_surface
   public volume_of_mesh
@@ -3103,7 +3104,7 @@ contains
     
     np_new = num_nodes
     ne_new = num_elems
-    
+
     do i = 1,num_elem_refine
        ne = elem_list_refine(i)
        node_start = node_list(1,ne)
@@ -3139,7 +3140,7 @@ contains
        enddo
        elem_nodes(2,ne_new) = node_end ! overwrites for just the 'last' element
     enddo
-    
+
     num_nodes = np_new
     num_elems = ne_new
 
@@ -3155,15 +3156,17 @@ contains
     deallocate(node_list)
     call element_connectivity_1d
     elem_ordrs(no_type,:) = 1 ! 0 for respiratory, 1 for conducting
-    call renumber_tree_in_order
 
   end subroutine refine_1d_elements
 
 !!!#############################################################################
-  
-  subroutine renumber_tree_in_order
-    ! reorders a 1D tree network so that elements and nodes increase with order.
+
+  subroutine reorder_tree()
+    !DEC$ ATTRIBUTES DLLEXPORT,ALIAS:"SO_REORDER_TREE" :: REORDER_TREE
+
     use math_utilities
+
+    integer :: n_dummy
 
     integer :: i,nchild,ne,ne0,ne_start,np,num_sorted,num_to_order,num_to_order_prev,&
          nunit,old_ne,old_np
@@ -3291,8 +3294,8 @@ contains
     deallocate(temp_map_node)
     deallocate(temp_node_xyz)
 
-  end subroutine renumber_tree_in_order
-
+  end subroutine reorder_tree
+  
 !!!#############################################################################
 
   subroutine set_initial_volume(Gdirn,COV,total_volume,Rmax,Rmin)
@@ -3392,7 +3395,6 @@ contains
        ne = units(nunit)
        if(ne.ne.0) vol_below(ne) = vol_below(ne) + unit_field(nu_vol,nunit) !add elastic unit volume
     enddo !nunit
-    
 
     do ne = num_elems,2,-1
        ne0 = elem_cnct(-1,1,ne)
