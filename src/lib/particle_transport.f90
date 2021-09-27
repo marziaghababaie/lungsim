@@ -177,11 +177,11 @@ contains
     time = 0.0_dp
 
     if(write_mass)then
-       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Mass|    Dep|  volEr|  MassEr|    C_inlet|  Mass by gen'')')
-       write(*,'(''   (s)| (mL/s)|    (mL)|   (L)|    (.ml)|  (.ml)|   Mass|   %   |    %   |    (frac) |   (.ml)'')')
+       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|    Mass|    Dep|  volEr|  MassEr|   C_inlet|  Mass by gen'')')
+       write(*,'(''   (s)|  (L/s)|     (L)|   (L)| (m.10^4)|(m.10^4)|   Mass|   %   |    %   | (m.mm^-3)|     (m.10^4)'')')
     else
-       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Mass|    Dep|  volEr|  MassEr|    C_inlet'')')
-       write(*,'(''   (s)| (mL/s)|    (mL)|   (L)|         |       |   Mass|   %   |    %   |    (frac) '')')
+       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|    Mass|    Dep|  volEr|  MassEr|   C_inlet'')')
+       write(*,'(''   (s)|  (L/s)|     (L)|   (L)| (m.10^4)|(m.10^4)|   Mass|   %   |    %   | (m.mm^-3) '')')
     endif
 
 !###########################################################
@@ -290,7 +290,7 @@ contains
     logical :: carryon
     character(len=60) :: sub_name
 
-    logical :: deposition_on = .true., diffusion_on = .true.
+    logical :: debug_on = .true., deposition_on = .true., diffusion_on = .true.
 
     integer :: SOLVER_FLAG
 
@@ -318,6 +318,7 @@ contains
     call reduce_transport_matrix(MatrixSize,nonzeros,noffset_entry,noffset_row,inspiration)
     time = time_start ! initialise the time
     carryon = .true. ! logical for whether solution continues
+    current_mass = 0.0_dp
     
     ! main time-stepping loop:  time-stepping continues while 'carryon' is true
     do while (carryon) !
@@ -330,6 +331,7 @@ contains
           call general_track(dt,.true.,tp,part_param)
           call particle_velocity(dt,part_param)
        endif
+       tp%ideal_mass = tp%ideal_mass + inlet_flow*dt*node_field(nj_conc1,1)
 
        ! assemble the element matrices. Element matrix calculation can be done directly 
        ! (based on assumption of interpolation functions) or using Gaussian interpolation.
@@ -412,7 +414,6 @@ contains
 
        if(.not.deposition_on) mass_deposit = 0.0_dp
 
-       tp%ideal_mass = tp%ideal_mass + inlet_flow*dt*node_field(nj_conc1,1)
        volume_error = 1.0e+2_dp*(current_volume - (part_param%initial_volume +&
             tp%total_volume_change))/(part_param%initial_volume + tp%total_volume_change)
 
@@ -425,14 +426,14 @@ contains
        
        if(write_mass)then
           write(*,'(f7.3,3(f8.3),f10.3,f8.3,2(f8.2),f9.2,f10.5,'' |'',16(f6.2),'' |'',f10.3)') &
-               time,inlet_flow/1.0e+3_dp,tp%total_volume_change/1.0e+3_dp,&
+               time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
                current_volume/1.0e+6_dp,tp%ideal_mass/1.0e+4_dp,current_mass/1.0e+4_dp,&
                mass_deposit/1.0e+4_dp,volume_error, &
-               mass_error,node_field(nj_conc1,1),(mass_by_gen(i)/1.0e+3_dp,i=1,16), &
+               mass_error,node_field(nj_conc1,1),(mass_by_gen(i)/1.0e+4_dp,i=1,16), &
                unit_mass/1.0e+3_dp
        else
           write(*,'(f7.3,3(f8.3),f10.3,f8.3,2(f8.2),f9.2,f10.5)') &
-               time,inlet_flow/1.0e+3_dp,tp%total_volume_change/1.0e+3_dp,&
+               time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
                current_volume/1.0e+6_dp,tp%ideal_mass/1.0e+4_dp,current_mass/1.0e+4_dp,&
                mass_deposit/1.0e+6_dp,volume_error, &
                mass_error,node_field(nj_conc1,1)
@@ -1209,7 +1210,7 @@ contains
     real(dp) :: A(3),abbr(9),abbr_t1,abbr_t2,alpha,Atube,B(3),C(3),coeffDiffSph(1:1000,2), &
          crossec(0:9),Dalv,deltaV(-1:9),DepFrac(4:6),h,j2,lduct,length,radius(0:9),Rin, &
          Vdep(0:6),Vduct(0:9),veloc(0:9),vfluid,volume(9),Vtot,Vtube,Z(3)
-    real(dp) :: part_acinus_old(9)
+    real(dp) :: mass_loss_np,part_acinus_old(9)
     real(dp),allocatable :: part_concentration(:)
     logical :: flag
     character(len=60) :: sub_name
@@ -1221,10 +1222,7 @@ contains
     
 !!! Copy particle 'concentration' solution to temporary array
     part_concentration(:) = node_field(nj_conc1,:)
-    
-    !write(*,*) 'part', part_concentration(1)
-    
-      
+
 !!! TLC volume-dependent average diameter of an alveolus (Weibel, 1962) 
     Dalv = 1.54e-3_dp * current_volume**(1.0_dp/3.0_dp) !ARC should be of acinar volume only?
 !!! inner radius for diffusion in alveoli related to inlet diameter (Hansen 1975)   
@@ -1486,26 +1484,21 @@ contains
 !         write(*,*) np,Vdep(0),Vdep(1),Vdep(2), Vdep(3),Vtot
 !      endif
 
-       if(np.lt.5)then
-          write(*,*) Vdep(0),Vtot,node_field(nj_loss,np),part_concentration(np)
-       endif
+       mass_loss_np = Vdep(0)*part_concentration(np)
+       
        !!! store the deposition quantities of each type
-       node_field(nj_loss,np) = node_field(nj_loss,np)+Vdep(0)*part_concentration(np) ! deposition quantity [g]
+       node_field(nj_loss,np) = node_field(nj_loss,np)+mass_loss_np ! deposition quantity [g]
        node_field(nj_loss_dif,np) = node_field(nj_loss_dif,np)+Vdep(1)*part_concentration(np) ! deposition quantity [g]
        node_field(nj_loss_sed,np) = node_field(nj_loss_sed,np)+Vdep(2)*part_concentration(np) ! deposition quantity [g]
        node_field(nj_loss_imp,np) = node_field(nj_loss_imp,np)+Vdep(3)*part_concentration(np) ! deposition quantity [g]
 
-       if(np.lt.5)then
-          write(*,*) Vdep(0),part_concentration(np),(1.0_dp-Vdep(0)/Vtot)
-       endif
-!!! assign new particle concentration to all nodes
-       part_concentration(np) = part_concentration(np)*(1.0_dp-Vdep(0)/Vtot)
-       
+       !! assign new particle concentration to all nodes
+       part_concentration(np) = (part_concentration(np)*Vtot - mass_loss_np)/Vtot
+
     enddo !np
     
 !!! copy nj_source (concentration - deposition) field to nj_conc1 field
     node_field(nj_conc1,:) = part_concentration(:)
-    !write(*,*) 'part2', part_concentration(1)
 
     deallocate(part_concentration)
 
@@ -1762,8 +1755,10 @@ contains
        np1 = elem_nodes(1,ne)
        np2 = elem_nodes(2,ne)
        average_conc = (node_field(nj,np1)+node_field(nj,np2))/2.0_dp
-       tree_mass(ne) = average_conc*elem_field(ne_vol,ne) ! mmol/mm^3 * mm^3       
-       wall_mass(ne) = (node_field(nj_loss,np1)+node_field(nj_loss,np2))/2.0_dp
+       tree_mass(ne) = average_conc*elem_field(ne_vol,ne) ! mmol/mm^3 * mm^3
+       wall_mass(ne) = node_field(nj_loss,np1)/real(elems_at_node(np1,0)) + &
+            node_field(nj_loss,np2)/real(elems_at_node(np2,0))
+       !wall_mass(ne) = (node_field(nj_loss,np1)+node_field(nj_loss,np2))/2.0_dp
        elem_field(ne_mass,ne) = tree_mass(ne)
        ngen = elem_ordrs(1,ne)
        mass_by_gen(ngen) = mass_by_gen(ngen) + tree_mass(ne)
