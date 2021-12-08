@@ -32,7 +32,7 @@ module indices
   ! indices for unit_field
   integer :: num_nu,nu_vol=0,nu_comp=0,nu_conc2=0,nu_Vdot0=0,nu_Vdot1=0, &
        nu_Vdot2=0,nu_dpdt=0,nu_pe=0,nu_vt=0,nu_air_press=0,nu_conc1=0,nu_vent=0,&
-       nu_vd=0,nu_perf=0,nu_blood_press=0
+       nu_vd=0,nu_perf=0,nu_blood_press=0,nu_loss=0,nu_loss_dif=0,nu_loss_sed=0
   !indices for gas exchange field
   ! TEMP ARC INDICES FOr particle transport, to be merged
    integer ::  nj_mass, nj_loss, nj_loss_dif, nj_loss_sed, nj_loss_imp,  ne_mass, &
@@ -68,7 +68,7 @@ module indices
   
   public num_nu,nu_vol,nu_comp, nu_conc2,nu_Vdot0,nu_Vdot1, &
        nu_Vdot2,nu_dpdt,nu_pe,nu_vt,nu_air_press,&
-       nu_conc1,nu_vent,nu_vd,&
+       nu_conc1,nu_vent,nu_vd,nu_loss,nu_loss_dif,nu_loss_sed,&
        nu_perf,nu_blood_press
 
   public num_gx, ng_p_alv_o2,ng_p_alv_co2,ng_p_ven_o2,ng_p_ven_co2, &
@@ -319,7 +319,7 @@ contains
     ne_vol_bel = 12
 
     ! indices for unit_field
-    num_nu=9
+    num_nu=12
     nu_vol=1 !volume of unit
     nu_comp=2
     nu_Vdot0=3 !flow in unit
@@ -330,6 +330,9 @@ contains
     nu_conc3=8 !ARC - again, why does this not meet convention??
     !added for DPI calc, HBK, Aug 2018
     nu_dpdt_0 = 9
+    nu_loss = 10
+    nu_loss_dif = 11
+    nu_loss_sed = 12 
     
     
     call enter_exit(sub_name,2)

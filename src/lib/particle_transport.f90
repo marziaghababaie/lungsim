@@ -75,7 +75,7 @@ contains
     logical :: carryon
     character(len=60) :: sub_name
     logical :: last_breath = .false.
-    logical :: write_mass = .true.
+    logical :: write_mass = .false.
     character(len=4) :: char_int
     character(len=MAX_FILENAME_LEN) :: file_export
 
@@ -88,12 +88,14 @@ contains
     part_param%num_brths_gm = 23!TJ TEMP 23
     part_param%solve_tolerance = 1.0e-8_dp
     part_param%diffusion_coeff = 22.5_dp
-    part_param%pdia = 0.4e-5_dp
-    part_param%dt_gm = 0.05_dp
+    !part_param%pdia = 0.4e-5_dp
+    !part_param%pdia = 1.0_dp * 1.0e-3_dp  ! micron --> mm
+    part_param%pdia = 0.04_dp * 1.0e-3_dp  ! micron --> mm
+    part_param%dt_gm = 0.02_dp
     part_param%VtotTLC = 186.89_dp
     part_param%totacinarLength = 7.73_dp
-    part_param%mu = 18.69e-6_dp
-    part_param%prho =  1.0e-3_dp             ! ! density of particles [g/mm^3]
+    part_param%mu = 18.69e-6_dp  ! Pa.s
+    part_param%prho =  1.0e-3_dp             ! density of particles [g/mm^3]
     part_param%lambda = 7.022e-5_dp  ! [mm] mean free path necessary
     part_param%kBoltz = 1.38e-14_dp  ! ! Boltzmann constant [J/K*1d9]=[kg*m^2/s^2/K*1d9]=[g*mm^2/s^2/K]
     part_param%Temperature = 36.0_dp+273.15_dp ! Temperature [K] from rho*R*T
@@ -118,17 +120,17 @@ contains
        refvol, RMaxMean, RMinMean, T_interval, volume_target, expiration_type)
        
     if(GDirn.eq.1) then 
-      part_param% gravityx = 9.81_dp*1.0e3_dp
+      part_param%gravityx = 9.81_dp*1.0e3_dp
       part_param%gravityy = 0.0_dp
       part_param%gravityz = 0.0_dp
     else if(GDirn.eq.2) then
-      part_param% gravityx = 0.0_dp
+      part_param%gravityx = 0.0_dp
       part_param%gravityy = 9.81_dp*1.0e3_dp
       part_param%gravityz = 0.0_dp
     else if (GDirn.eq.3) then !Needs checking, may not always be consistent with mesh
-      part_param% gravityx = 0.0_dp
+      part_param%gravityx = 0.0_dp
       part_param%gravityy = 0.0_dp
-      part_param%gravityz = 0.0_dp
+      part_param%gravityz = 9.81_dp*1.0e3_dp ! *MHT change*
     endif
     
     part_param%time_inspiration = 2.0_dp
@@ -151,6 +153,8 @@ contains
     write(*,'('' Anatomical deadspace = '',F8.3,'' ml'')') volume_tree/1.0e+3_dp ! in mL
     write(*,'('' Respiratory volume   = '',F8.3,'' L'')') (part_param%initial_volume-volume_tree)/1.0e+6_dp !in L
     write(*,'('' Total lung volume    = '',F8.3,'' L'')') part_param%initial_volume/1.0e+6_dp !in L
+    write(*,'('' Inlet flow           = '',f8.3,'' L.s^-1'')') abs(elem_field(ne_Vdot,1))/1.0e6_dp
+    write(*,'('' Inlet concentration  = '',f8.3,'' g.mm^-3'')') node_field(nj_conc1,1)
 
      op_name = 'file_particle' !ARC TEMP placeholder
     ! print *, 'op_name is', op_name
@@ -177,11 +181,18 @@ contains
     time = 0.0_dp
 
     if(write_mass)then
-       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|    Mass|    Dep|  volEr|  MassEr|   C_inlet|  Mass by gen'')')
-       write(*,'(''   (s)|  (L/s)|     (L)|   (L)| (m.10^4)|(m.10^4)|   Mass|   %   |    %   | (m.mm^-3)|     (m.10^4)'')')
+       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Total|BrnLumen|BrnDepos|AlvLumen|AlvDepos|'',&
+            &''   volEr|  MassEr|    C_inlet|  Mass by gen'')')
+       write(*,'(''   (s)|  (L/s)|     (L)|   (L)|    (g)  |    Mass|    Mass|    Mass|    Mass|    Mass|'',&
+            &''    %   |    %   |  (g.mm^-3)|       (g)   '')')
     else
-       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|    Mass|    Dep|  volEr|  MassEr|   C_inlet'')')
-       write(*,'(''   (s)|  (L/s)|     (L)|   (L)| (m.10^4)|(m.10^4)|   Mass|   %   |    %   | (m.mm^-3) '')')
+       write(*,'(58x, ''||----------------------------- Mass (g) in:-----------------------------||'')') 
+       write(*,'(''  Time|   dVol|     Vol ( %Err) |IdlMass|    Mass ( %Err) |'',&
+            &'' Bronch| Bronch| -diff-| -sedi-| -impc-| Alveol| Alveol| '',&
+            &''-diff-| -sedi-  | DF tot| DF brn| DF alv|'')')
+       write(*,'(''   (s)|    (L)|     (L)         |   (g) |     (g)         |'',&
+            &''  lumen|   wall|       |       |       |  lumen|   wall|'',&
+            &''       |         |       |       |       |'')')
     endif
 
 !###########################################################
@@ -280,9 +291,9 @@ contains
 
     integer :: i,MatrixSize,nonzeros,ncol,nentry, &
          noffset_entry,noffset_row,np,nrow,nrow_BB
-    real(dp) :: AA,BB,current_mass,current_volume,inlet_flow, &
-         mass_by_gen(50),mass_deposit,mass_error,theta,time,volume_error,volume_tree,&
-         cpu_dt_start,cpu_dt_end,temp_mass,unit_mass
+    real(dp) :: AA,BB,current_mass,current_volume,dep_eff_alv,dep_eff_bronch,inlet_flow, &
+         lumen_mass,mass_by_gen(50),mass_deposit,mass_error,theta,time,volume_error,volume_tree,&
+         cpu_dt_start,cpu_dt_end,temp_mass,unit_mass,unit_wall,last_mass
 
 
     real(dp) :: Ccun
@@ -403,40 +414,57 @@ contains
 
        if(deposition_on)then
           if(inlet_flow.lt.0.0_dp)then
-             call particle_deposition(current_volume,dt,.false.,part_param)
+             call particle_deposition(dt,.false.,part_param)
           else
-             call particle_deposition(current_volume,dt,.true.,part_param)
+             call particle_deposition(dt,.true.,part_param)
              node_field(nj_conc1,1) = tp%inlet_concentration(1)
           endif
        endif
        ! estimate the volume and mass errors
-       call calc_mass_particles(nj_conc1,nu_conc1,current_mass,mass_deposit,mass_by_gen,unit_mass)
+       call calc_mass_particles(nj_conc1,nu_conc1,lumen_mass,mass_deposit,mass_by_gen, &
+            part_param,unit_mass,unit_wall)
 
+       current_mass = lumen_mass + mass_deposit + unit_mass + unit_wall
+       
        if(.not.deposition_on) mass_deposit = 0.0_dp
 
        volume_error = 1.0e+2_dp*(current_volume - (part_param%initial_volume +&
             tp%total_volume_change))/(part_param%initial_volume + tp%total_volume_change)
 
        if(tp%ideal_mass.gt.0.0_dp)then
-          mass_error = 1.0e+2_dp*(current_mass + mass_deposit - tp%ideal_mass)/tp%ideal_mass
+          mass_error = 1.0e+2_dp*(current_mass - tp%ideal_mass)/tp%ideal_mass
        else
           mass_error = 0.0_dp
        endif
        call cpu_time(cpu_dt_end)
+
+       dep_eff_alv = unit_wall/current_mass
+       dep_eff_bronch = mass_deposit/current_mass
        
        if(write_mass)then
-          write(*,'(f7.3,3(f8.3),f10.3,f8.3,2(f8.2),f9.2,f10.5,'' |'',16(f6.2),'' |'',f10.3)') &
+          write(*,'(f7.3,3(f8.3),f10.2,7(f9.2),f10.5,'' |'',16(f6.1))') &
                time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
-               current_volume/1.0e+6_dp,tp%ideal_mass/1.0e+4_dp,current_mass/1.0e+4_dp,&
-               mass_deposit/1.0e+4_dp,volume_error, &
-               mass_error,node_field(nj_conc1,1),(mass_by_gen(i)/1.0e+4_dp,i=1,16), &
-               unit_mass/1.0e+3_dp
+               current_volume/1.0e+6_dp,tp%ideal_mass,current_mass,lumen_mass, &
+               mass_deposit,unit_mass, unit_wall, volume_error, &
+               mass_error,node_field(nj_conc1,1),(mass_by_gen(i),i=1,16)
        else
-          write(*,'(f7.3,3(f8.3),f10.3,f8.3,2(f8.2),f9.2,f10.5)') &
-               time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
-               current_volume/1.0e+6_dp,tp%ideal_mass/1.0e+4_dp,current_mass/1.0e+4_dp,&
-               mass_deposit/1.0e+6_dp,volume_error, &
-               mass_error,node_field(nj_conc1,1)
+          write(*,'(f7.3,2(f8.3),'' ('',f5.2,'') |'',2(f8.2),'' ('',f5.2,'') |'',9(f8.2),'' |'',3(f8.3))') &
+               time,tp%total_volume_change/1.0e+6_dp,current_volume/1.0e+6_dp, volume_error, &
+               tp%ideal_mass, &
+               current_mass, &  ! the mass in the entire model
+               mass_error, &    ! error in total mass
+               lumen_mass, &    ! the mass in the bronchial airway lumen
+               mass_deposit, &  ! the total mass deposited on bronchial airway walls
+               sum(node_field(nj_loss_dif,1:num_nodes)), &  ! bronchial dep mass by diffusion
+               sum(node_field(nj_loss_sed,1:num_nodes)), &  ! bronchial dep mass by sedimentation
+               sum(node_field(nj_loss_imp,1:num_nodes)), &  ! bronchial dep mass by impaction
+               unit_mass, &     ! the mass in the alveolar airway lumen
+               unit_wall, &     ! the total mass deposited on alveolar walls
+               sum(unit_field(nu_loss_dif,1:num_units)), &  ! alveolar dep mass by diffusion
+               sum(unit_field(nu_loss_sed,1:num_units)), &  ! alveolar dep mass by sedimentation
+               dep_eff_alv+dep_eff_bronch, &  ! total deposition fraction
+               dep_eff_bronch, &  ! airway deposition fraction
+               dep_eff_alv        ! acinar deposition fraction
        endif
        
        err = mass_error
@@ -456,6 +484,20 @@ contains
           endif
        endif
     enddo !carryon
+
+    write(*,'(''---------------------------------------'')')
+    write(*,'('' End of breath deposition efficiencies:'')')
+    write(*,'(5x, ''TOTAL DE ='', f6.3, ''   BRONCHIAL DE ='',f6.3, ''   ALVEOLAR DE='',f6.3)') &
+         dep_eff_alv+dep_eff_bronch,dep_eff_bronch,dep_eff_alv
+    write(*,'(5x, ''Diffusive-    '',5x, f8.3, 15x, f8.3)') &
+         sum(node_field(nj_loss_dif,1:num_nodes)),sum(unit_field(nu_loss_dif,1:num_units))
+    write(*,'(5x, ''Sedimentation-'',5x, f8.3, 15x, f8.3)') &
+         sum(node_field(nj_loss_sed,1:num_nodes)), sum(unit_field(nu_loss_sed,1:num_units))
+    write(*,'(5x, ''Impaction-    '',5x, f8.3, 15x, ''   -'')') &
+         sum(node_field(nj_loss_imp,1:num_nodes))
+    write(*,'(5x, ''Totals--      '',5x, f8.3, 15x, f8.3)') dep_eff_bronch, dep_eff_alv
+    write(*,'(''---------------------------------------'')')
+    
     
     call enter_exit(sub_name,2)
   end subroutine solve_particles
@@ -610,7 +652,7 @@ contains
                          concentration(i) = ((1.0_dp-local_xi)*node_field(nj_g(i),np2)) + &
                               (local_xi*node_field(nj_g(i),np1))
                          mean_c(i) = 0.5_dp*(concentration(i) + node_field(nj_g(i),np2))
-                         c_mass(i) = c_mass(i) + mean_c(i) &
+                         c_mass(i) = c_mass(i) + mean_c(i) * local_xi &                     ! *MHT change*
                               *abs(elem_field(ne_vol,elems_at_node(np2,1))) !!! for acinus
                       enddo
                    else
@@ -1148,12 +1190,15 @@ contains
        np2 = elem_nodes(2,ne) ! distal node number
 !!! calculate angle between branch axis and gravitational direction (alpha)
        forall(j=1:3) vector1(j) = node_xyz(j,np2)-node_xyz(j,np)
+
        vector2 = 0.0_dp
-       vector2(3) = node_xyz(3,np)+1.0_dp
+!!!! MHT 021221 - this is wrong here: vector2 should reflect the actual gravitational vector. here it assumes Z axis
+!       vector2(3) = node_xyz(3,np)+1.0_dp  ! *MHT original*
+       vector2(3) = -1.0_dp                   ! *MHT change*
        alpha = angle_btwn_vectors(vector1,vector2)
 
 !!! settlement velocity w.r.t. flow direction; set equal to zero to deactivate gravity effect        
-       vseff = cos(alpha)*pi*elem_field(ne_radius,ne)**2*vs
+       vseff = cos(alpha)*pi*elem_field(ne_radius,ne)**2.0_dp * vs
 
 !!! note following:
 !!! ne_part_vel was stored as nej_flow in cmiss
@@ -1182,7 +1227,7 @@ contains
 
 !!!#######################################################################################
   
-  subroutine particle_deposition(current_volume,dt,inspiration,part_param)
+  subroutine particle_deposition(dt,inspiration,part_param)
 
 !!!    Calculates amount of deposited particles in each element,
 !!!    reduces respective concentration field 'nj_source' and 
@@ -1196,23 +1241,23 @@ contains
     use arrays
     use indices
     use other_consts
-    use mesh_utilities,only: angle_btwn_points
+    use mesh_utilities,only: angle_btwn_points,angle_btwn_vectors
     use diagnostics, only: enter_exit
     
     implicit none
   
     type(particle_parameters) :: part_param
-    real(dp),intent(in) :: current_volume,dt
+    real(dp),intent(in) :: dt
     logical,intent(in) :: inspiration
     !     Local Variables
     integer :: gen,i,j,maxi,ne,ne0,noelem,np,npend,npstart, &
          npstep,np0,np1,np2,np3,nunit
     real(dp) :: A(3),abbr(9),abbr_t1,abbr_t2,alpha,Atube,B(3),C(3),coeffDiffSph(1:1000,2), &
-         crossec(0:9),Dalv,deltaV(-1:9),DepFrac(4:6),h,j2,lduct,length,radius(0:9),Rin, &
-         Vdep(0:6),Vduct(0:9),veloc(0:9),vfluid,volume(9),Vtot,Vtube,Z(3)
-    real(dp) :: mass_loss_np,part_acinus_old(9)
+         crossec(0:9),current_volume,Dalv,deltaV(-1:9),DepFrac(4:6),h,j2,lduct,length,radius(0:9),Rin, &
+         unit_loss,Vdep(0:6),Vduct(0:9),veloc(0:9),vfluid,volume(9),vol_croot_scale,Vtot,Vtube,Z(3)
+    real(dp) :: mass_loss_np,mean_conc,part_acinus_old(9)
     real(dp),allocatable :: part_concentration(:)
-    logical :: flag
+    logical :: acinar_deposition = .true., flag
     character(len=60) :: sub_name
 
     sub_name = 'particle_deposition'
@@ -1222,32 +1267,6 @@ contains
     
 !!! Copy particle 'concentration' solution to temporary array
     part_concentration(:) = node_field(nj_conc1,:)
-
-!!! TLC volume-dependent average diameter of an alveolus (Weibel, 1962) 
-    Dalv = 1.54e-3_dp * current_volume**(1.0_dp/3.0_dp) !ARC should be of acinar volume only?
-!!! inner radius for diffusion in alveoli related to inlet diameter (Hansen 1975)   
-    Rin = Dalv*0.325_dp   
-    abbr(7) = Rin/Dalv*2.0_dp
-    abbr(8) = pi*abbr(7)
-    ! abbreviation for acinar diffusive deposition
-    abbr(2) = -4.0_dp*pi**2.0_dp*part_param%diffu/Dalv**2.0_dp 
-    flag = .true.
-    maxi = 1
-    j = 0
-    do while(flag)   ! find loop number for series in acinar diffusion
-       j = j+1
-       j2 = real(j)**2.0_dp
-       coeffDiffSph(j,1) = (-1.0_dp)**(real(j)+1.0_dp)/j2* &
-            (sin(real(j)*abbr(8))/real(j)/pi**2.0_dp- &
-            cos(real(j)*abbr(8))*abbr(7)/pi) ! set up coefficients for sum to speed up
-       coeffDiffSph(j,2) = j2*abbr(2)
-       h = exp(coeffDiffSph(j,2)*dt)/j2                  
-       if((h.lt.5.0e-7_dp).or.j.eq.500)then
-          maxi = j+1         ! set loop number for series in acinar diffusion
-          flag = .false.
-       endif
-    enddo ! while
-    maxi = maxi-1 ! not here in the original
 
     if(inspiration)then
        npstart = 1           ! start from node 1 to calculate deposition -- loop in flow direction
@@ -1268,46 +1287,66 @@ contains
           ne = elems_at_node(np,noelem)
           if(np.eq.elem_nodes(1,ne))then
              np2 = elem_nodes(2,ne)
+             A(:) = node_xyz(:,np)  ! *MHT change*
+             B(:) = node_xyz(:,np2) ! *MHT change*
           else
              np2 = elem_nodes(1,ne)
+             A(:) = node_xyz(:,np2) ! *MHT change*
+             B(:) = node_xyz(:,np)  ! *MHT change*
           endif
-          lduct = elem_field(ne_length,ne)
+    ! *MHT change* for following: not clear if should be branch length of segment length? currently original      
+          lduct = branch_length(ne) ! this is the length of the whole (unrefined) branch, i.e. between bifurcations
           !element (tube) length - since loop is over every node adjacent element, half length is used
           length = elem_field(ne_length,ne)/2.0_dp
+          !lduct = length ! *MHT change*- actually keeps the same as original
           radius(0) = elem_field(ne_radius,ne) ! element (tube) radius
           Atube = pi*radius(0)**2.0_dp ! element (tube) cross section
           Vtube = Atube*length ! element (tube) volume
           Vtot = Vtot+Vtube  ! sum up total volume
           vfluid = elem_field(ne_Vdot,ne)/Atube  ! fluid velocity [mm/s]
        
+!!!! MHT 021221 - this is wrong here: vector2 should reflect the actual gravitational vector. here it assumes Z axis
 !!! CALCULATE ANGLE BETWEEN TUBE AXIS AND GRAVITATION DIRECTION
-          A(:) = node_xyz(:,np) !stores element coordinates in A,B
-          B(:) = node_xyz(:,np2) !for angle to gravity calculation
-          z = A
-          Z(3) = A(3)-1.0_dp  ! unit vector in direction of gravity - requires respective cartesian coorsinates
-          alpha = abs(angle_btwn_points(B,A,Z)) ! calculate angle between tube axis and gravity vector
+          !A(:) = node_xyz(:,np) !stores element coordinates in A,B! *MHT original*
+          !B(:) = node_xyz(:,np2) !for angle to gravity calculation! *MHT original*
+          !z = A   ! *MHT original*
+          !Z(3) = A(3)-1.0_dp  !! *MHT original* unit vector in direction of gravity - requires respective cartesian coorsinates
+          !alpha = abs(angle_btwn_points(B,A,Z)) ! calculate angle between tube axis and gravity vector! *MHT original*
+          z = 0.0_dp ! *MHT change*
+          z(3) = -1.0_dp  ! *MHT change*
+          alpha = abs(angle_btwn_vectors(B-A,Z)) ! calculate angle between tube axis and gravity vector! *MHT change*
 
 !!! sedimentation
-          Vdep(1) = Vdep(1) + abs(sin(alpha))*part_param%prho*&
-                              part_param%gravityy*&
-                              part_param%pdia**2.0_dp*&
+          !*MHT  -original
+!          Vdep(1) = Vdep(1) + abs(sin(alpha))*part_param%prho*&  
+!                              part_param%gravityy* & 
+!                              part_param%pdia**2.0_dp*&
+!                         length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
+          ! *MHT change*
+          mean_conc = 0.5_dp * (node_field(nj_conc1,np) + node_field(nj_conc1,np2))
+          Vdep(1) = Vdep(1) + abs(sin(alpha)) * mean_conc * 9.81e3_dp * part_param%pdia**2.0_dp * &
                length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
 
 !!! impaction
+!!! MHT *change: should be using the angle between an unfrefined branch and its parent, then taking
+!!!! just a proportion of this for impaction
           if(inspiration)then ! impact only during inhalation (why?)
-             ne0 = elem_cnct(-1,1,ne) ! parent element 
-             if(ne0.gt.0)then ! parent element exists, means not inflow location
-                np0 = elem_nodes(2,ne0) ! second node parent element (acc. to ordering second node in flow direction)
+             ne0 = element_top_of_branch(ne)  !originally was elem_cnct(-1,1,ne) ! parent element 
+             if(elem_cnct(-1,1,ne0).gt.0)then ! parent element exists, means not inflow location
+! was here but np0 not used                np0 = elem_nodes(2,ne0) ! second node parent element (acc. to ordering second node in flow direction)
                 ! mht - not sure about this. calculating as angle between current and parent           
-                do i=1,2
-                  do j=1,2
-                     if(elem_nodes(i,ne).eq.elem_nodes(j,ne0))then ! find node that is part of parent and daughter 
-                       np1 = elem_nodes(i,ne) 
-                       np2 = elem_nodes(3-i,ne) 
-                       np3 = elem_nodes(3-j,ne0)
-                     endif
-                  enddo   !j
-                enddo      !i
+!                do i=1,2
+!                  do j=1,2
+!                     if(elem_nodes(i,ne).eq.elem_nodes(j,ne0))then ! find node that is part of parent and daughter 
+!                       np1 = elem_nodes(i,ne) 
+!                       np2 = elem_nodes(3-i,ne) 
+!                       np3 = elem_nodes(3-j,ne0)
+!                     endif
+!                  enddo   !j
+                !                enddo      !i
+                np1 = elem_nodes(1,ne0)
+                np2 = elem_nodes(2,ne0)
+                np3 = elem_nodes(1,elem_cnct(-1,1,ne0)) ! parent start node
 !!! CALCULATE ANGLE TO DOWNSTREAM BRANCH AS WELL !WHAT ABOUT IMPACT DURING EXHALATION????
                 A(:) = node_xyz(:,np1) ! A is the connection node of parent and daughter 
                 B(:) = node_xyz(:,np2) 
@@ -1315,7 +1354,12 @@ contains
                 alpha = angle_btwn_points(B,A,C)-pi ! calculate angle between parent and daughter tube axis
              
                 if(abs(sin(alpha)).gt.zero_tol)then
-                   abbr(1) = 18.0_dp*part_param%mu/part_param%prho&
+          !*MHT  -original
+!                   abbr(1) = 18.0_dp*part_param%mu/part_param%prho&
+!                                                  /part_param%pdia**2.0_dp&
+!                                                  /abs(sin(alpha))
+          ! *MHT change*
+                   abbr(1) = 18.0_dp*part_param%mu/mean_conc &
                                                   /part_param%pdia**2.0_dp&
                                                   /abs(sin(alpha))
                    h = 2.0_dp*abs(sin(alpha))/lduct*abs(vfluid)/ &
@@ -1335,17 +1379,51 @@ contains
           else
              h = 0.0_dp           ! equation not valid for keeping breath (??)
           endif
-          Vdep(3) = Vdep(3)+pi*h*(2.0_dp*radius(0)-h)*length*dt/lduct*abs(vfluid) ! deposition with referencing to time step dt
+          ! Vdep(3) uses length/lduct so that only the proportional fraction of deposition is calculated
+          ! *MHT - changed, but only re-ordered
+          Vdep(3) = Vdep(3) + pi*abs(vfluid)*h* ((2.0_dp*radius(0)-h)*length/lduct) * dt ! deposition with referencing to time step dt
 
 !!!! calculate deposition in acini
-          if(num_units.gt.0.and.elem_cnct(1,0,ne).eq.0)then 
+          if(num_units.gt.0.and.elem_cnct(1,0,ne).eq.0.and.acinar_deposition)then 
 !!!!         call acinar_deposition(ne,current_volume,dt)
 
-            nunit = where_inlist(ne,units) ! get the unit number
+             nunit = where_inlist(ne,units) ! get the unit number
+             current_volume = unit_field(nu_vol,nunit)
+             ! scaling factor from Haefeli-Bleuer & Weibel TLC size to current size
+             vol_croot_scale = (current_volume/part_param%VtotTLC)**(1.0_dp/3.0_dp)
+             
+!!! TLC volume-dependent average diameter of an alveolus (Weibel, 1962)
+!!! original used total lung volume. here we assume 2^15 acini
+             Dalv = 1.54e-3_dp * (current_volume*2.0_dp**15)**(1.0_dp/3.0_dp) !ARC should be of acinar volume only?  ! *MHT change*
+             Dalv = 0.154_dp  ! *MHT change*
+!!! inner radius for diffusion in alveoli related to inlet diameter (Hansen 1975)   
+             Rin = Dalv*0.325_dp   
+             abbr(7) = Rin/Dalv*2.0_dp
+             abbr(8) = pi*abbr(7)
+             ! abbreviation for acinar diffusive deposition
+             abbr(2) = -4.0_dp*pi**2.0_dp*part_param%diffu/Dalv**2.0_dp 
+             flag = .true.
+             maxi = 1
+             j = 0
+             do while(flag)   ! find loop number for series in acinar diffusion
+                j = j+1
+                j2 = real(j)**2.0_dp
+                coeffDiffSph(j,1) = (-1.0_dp)**(real(j)+1.0_dp)/j2* &
+                     (sin(real(j)*abbr(8))/real(j)/pi**2.0_dp- &
+                     cos(real(j)*abbr(8))*abbr(7)/pi) ! set up coefficients for sum to speed up
+                coeffDiffSph(j,2) = j2*abbr(2)
+                h = exp(coeffDiffSph(j,2)*dt)/j2                  
+                if((h.lt.5.0e-7_dp).or.j.eq.500)then
+                   maxi = j+1         ! set loop number for series in acinar diffusion
+                   flag = .false.
+                endif
+             enddo ! while
+             maxi = maxi-1 ! not here in the original
+             
             radius(0) = elem_field(ne_radius,ne)
 
             ! difference of FEM-mesh and measurements (HAEFELI-BLEUER,1988)
-            abbr(3) = radius(0) - scale_radius_acinus(part_param%RacTLC(1),current_volume)
+            abbr(3) = radius(0) - radius(0)*vol_croot_scale
             abbr(4) = 0.0_dp  ! variable to store axial position for radius scaling
 
             veloc(0) = elem_field(ne_part_vel,ne)/pi/radius(0)**2.0_dp ! velocity terminal bronchi
@@ -1354,18 +1432,13 @@ contains
             crossec(0) = radius(0)**2.0_dp*pi ! cross-sectional area of terminal bronchiole in FEM model  
 
             do gen = 1,9 ! loop over acinar generations - deposition efficiency the same in all gens
-               abbr(4) = abbr(4)+part_param%LacTLC(gen+1) ! axial position of node
-
-               ! scale duct radius wrt. current acinar volume and linear scaling to adapt HBW to FEM mesh
-               radius(gen) = (part_param%totacinarLength-abbr(4)) &
-                              /part_param%totacinarLength*abbr(3)+ &
-                             scale_radius_acinus(part_param%RacTLC(gen+1),current_volume)
+               abbr(4) = abbr(4)+part_param%LacTLC(gen+1)*vol_croot_scale ! axial position of node (length of acinar duct)
+               radius(gen) = (part_param%totacinarLength*vol_croot_scale-abbr(4)) &
+                    /(part_param%totacinarLength*vol_croot_scale)*abbr(3)+ &
+                    part_param%RacTLC(gen+1)*vol_croot_scale
                crossec(gen) = pi*radius(gen)**2.0_dp*(2.0_dp**gen) ! accumulated duct cross-sectional area 
-               Vduct(gen) = crossec(gen)*part_param%LacTLC(gen+1) ! duct volume in acinar region
-
-               ! linear scaling of alveolar volume - can become negative!!
-               volume(gen) = max(part_param%VacTLC(gen) &
-                             /part_param%VtotTLC*unit_field(nu_vol,nunit)-Vduct(gen),0.0_dp)
+               Vduct(gen) = crossec(gen)*part_param%LacTLC(gen+1)*vol_croot_scale  ! duct volume in acinar region
+               volume(gen) = part_param%VacTLC(gen) * (current_volume/part_param%VtotTLC) - Vduct(gen)
                part_acinus_old(gen) = part_acinus_field(1+gen,nunit)
                 
 !!!.............diffusion in alveolar tissue
@@ -1384,9 +1457,9 @@ contains
                    j = j + 1
                 enddo !j
 
-                if((abbr(6).gt.0.0_dp).and.(abbr(5).gt.abbr(6)))then ! can become zero for large T (accuracy of real*8)
+                if((abbr(6).gt.0.0_dp).and.(abs(abbr(6)-abbr(5)).ge.zero_tol))then ! can become zero for large T (accuracy of real*8)
                    ! diffusion fraction out of a sphere (Diffusion,Jost,1960) (0.853d0 is area correction ChoiKim2007)
-                   DepFrac(4) = 1.0_dp-abbr(6)/abbr(5)*0.853_dp
+                   DepFrac(4) = 1.0_dp-abbr(6)/abbr(5) !*0.853_dp !*MHT change*
                 else
                    DepFrac(4) = 0.0_dp
                 endif
@@ -1394,10 +1467,14 @@ contains
 
 !!!!............ sedimentation in alveolar tissue
                 ! deposition fraction due to sedimentation (0.853d0 is area correction ChoiKim2007) 
-                DepFrac(5) = part_param%prho &
-                             *part_param%gravityy &
+!                DepFrac(5) = part_param%prho &
+!                             *9.81e3_dp & !part_param%gravityy &
+!                             *part_param%pdia**2.0_dp &
+!                             *dt/12.0_dp/part_param%mu/Dalv*0.853_dp
+                DepFrac(5) = part_acinus_field(1+gen,nunit) &
+                             *9.81e3_dp & !part_param%gravityy &
                              *part_param%pdia**2.0_dp &
-                             *dt/12.0_dp/part_param%mu/Dalv*0.853_dp   
+                             *dt/12.0_dp/part_param%mu/Dalv  !*0.853_dp
 
                 ! sum deposition fractions without mutually eliminating part
                 DepFrac(6) = DepFrac(4)/2.0_dp+DepFrac(5)+DMAX1(DepFrac(4)/2.0_dp-DepFrac(5),0.0_dp)
@@ -1408,69 +1485,78 @@ contains
                 enddo !j
        
                 if(gen.ge.1)THEN ! by increasing number, deposition in tubes can be taken into account
-                  Vdep(4:6) = 0.0_dp
-                  Vdep(5) = 0.0_dp
+                   Vdep(4:6) = 0.0_dp
+                   Vdep(5) = 0.0_dp
                 else
-                ! volume change each generation within on time step
-                deltaV(gen) = part_param%VacTLC(gen)/part_param%VtotTLC*deltaV(-1) 
-
-                ! velocities in acinar generations
-                veloc(gen) = (veloc(gen-1)*crossec(gen-1)-deltaV(gen-1)/dt)/crossec(gen) 
-!
-                !! Sedimentation in ducts
-                ! deposition volume due to sedimentation (statistic orientation to gravity)
-                Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
-                          *part_param%prho &
-                          *part_param%gravityy &
-                          *part_param%pdia**2.0_dp &
-                          *part_param%LacTLC(gen+1)*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun 
-
-                !!Brownian diffusion (average travelling distance within duct)
-                h = 2.0_dp/3.0_dp*(4.0_dp*part_param%diffu*part_param%LacTLC(gen+1)&
-                                  /abs(veloc(gen)))**0.5_dp/pi 
-
-                if(h.gt.radius(gen))then ! all particles are deposited
-                   Vdep(4) = Vduct(gen)
-                   Vdep(6) = Vduct(gen)
-                else
-                  ! deposition with referencing to time step DT
-                  Vdep(4) = pi*h*(2.0_dp*radius(gen)-h)*dt*abs(veloc(gen))*2.0_dp**gen 
-                    
-                  !!Total alveolar deposition
-                  ! sum deposition volumes without mutually eliminating volume
-                  Vdep(6) = Vdep(4)/2.0_dp+Vdep(5)+DMAX1(Vdep(4)/2.0_dp-Vdep(5),0.0_dp)
-                endif
-!                   
-                 do j = 4,6
-                    if(Vdep(j).gt.(0.2_dp*Vduct(gen)))then
-
-                      ! check if deposition volume extends volume in Acinus
-                      if(Vdep(j).gt.Vduct(gen)) Vdep(j)=Vduct(gen) 
-                    endif
-                    if(Vdep(j).ne.Vdep(j)) Vdep(j) = 0.0_dp ! function ISNAN does not work
-                  enddo !j
+                   ! volume change each generation within on time step
+                   deltaV(gen) = part_param%VacTLC(gen)/part_param%VtotTLC*deltaV(-1) 
+                   
+                   ! velocities in acinar generations
+                   veloc(gen) = (veloc(gen-1)*crossec(gen-1)-deltaV(gen-1)/dt)/crossec(gen) 
+                   !
+                   !! Sedimentation in ducts
+                   ! deposition volume due to sedimentation (statistic orientation to gravity)
+!                   Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
+!                        *part_param%prho &
+!                        *9.81e3_dp & !*part_param%gravityy &
+!                        *part_param%pdia**2.0_dp &
+!                        *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun 
+                   Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
+                        *part_acinus_field(1+gen,nunit) &
+                        *9.81e3_dp & !*part_param%gravityy &
+                        *part_param%pdia**2.0_dp &
+                        *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun 
+                   
+                   !!Brownian diffusion (average travelling distance within duct)
+                   h = 2.0_dp/3.0_dp*(4.0_dp*part_param%diffu*part_param%LacTLC(gen+1)*vol_croot_scale&
+                        /abs(veloc(gen)))**0.5_dp/pi 
+                   
+                   if(h.gt.radius(gen))then ! all particles are deposited
+                      Vdep(4) = Vduct(gen)
+                      Vdep(6) = Vduct(gen)
+                   else
+                      ! deposition with referencing to time step DT
+                      Vdep(4) = pi*h*(2.0_dp*radius(gen)-h)*dt*abs(veloc(gen))*2.0_dp**gen 
+                      
+                      !!Total alveolar deposition
+                      ! sum deposition volumes without mutually eliminating volume
+                      Vdep(6) = Vdep(4)/2.0_dp+Vdep(5)+DMAX1(Vdep(4)/2.0_dp-Vdep(5),0.0_dp)
+                   endif
+                   !                   
+                   do j = 4,6
+                      if(Vdep(j).gt.(0.2_dp*Vduct(gen)))then
+                         
+                         ! check if deposition volume extends volume in Acinus
+                         if(Vdep(j).gt.Vduct(gen)) Vdep(j)=Vduct(gen) 
+                      endif
+                      if(Vdep(j).ne.Vdep(j)) Vdep(j) = 0.0_dp ! function ISNAN does not work
+                   enddo !j
                 endif !gen.LT.9
-       
+                
                 if(part_acinus_field(1+gen,nunit).ge.0.0_dp)then
                    ! NOTHING because thsi way NaN values are covered too
                 else
                    part_acinus_field(1+gen,nunit) = 0.0_dp
                 endif
+
                 ! for deposition in the alveolar tissue the radial concentration profile is approximated by taking the next generation
-                node_field(nj_loss,np) = node_field(nj_loss,np)+Vdep(6)*part_acinus_field(1+gen,nunit)+volume(gen)* &
-                     DepFrac(6)*part_acinus_field(MIN(gen+2,10),nunit) ! store deposition quantity (mass in [g])
-                node_field(nj_loss_dif,np) = node_field(nj_loss_dif,np)+Vdep(4)*part_acinus_field(1+gen,nunit)+volume(gen)* &
-                     DepFrac(4)*part_acinus_field(MIN(gen+2,10),nunit) ! store diffusion quantity (mass in [g])
-                node_field(nj_loss_sed,np) = node_field(nj_loss_sed,np)+Vdep(5)*part_acinus_field(1+gen,nunit)+volume(gen)* &
-                     DepFrac(5)*part_acinus_field(MIN(gen+2,10),nunit) ! store sedimentaion quantity (mass in [g])
+                unit_loss = Vdep(6)*part_acinus_field(1+gen,nunit) &
+                     +volume(gen)*DepFrac(6)*part_acinus_field(MIN(gen+2,10),nunit)
+                
+                unit_field(nu_loss,nunit) = unit_field(nu_loss,nunit) + unit_loss ! store deposition quantity (mass in [g])
+                unit_field(nu_loss_dif,nunit) = unit_field(nu_loss_dif,nunit) + Vdep(4)*part_acinus_field(1+gen,nunit) &
+                     +volume(gen)*DepFrac(4)*part_acinus_field(MIN(gen+2,10),nunit) ! store diffusion quantity (mass in [g])
+                unit_field(nu_loss_sed,nunit) = unit_field(nu_loss_sed,nunit) + Vdep(5)*part_acinus_field(1+gen,nunit) &
+                     +volume(gen)*DepFrac(5)*part_acinus_field(MIN(gen+2,10),nunit) ! store sedimentaion quantity (mass in [g])
+
                 part_acinus_field(1+gen,nunit) = part_acinus_field(1+gen,nunit)-volume(gen)*DepFrac(6)/(volume(gen)+Vduct(gen)) &
                      *part_acinus_field(MIN(gen+2,10),nunit)-Vdep(6)/(volume(gen)+Vduct(gen))*part_acinus_field(1+gen,nunit) ! assign new concentration acini
-                if(part_acinus_field(1+gen,nunit).gt.0.0_dp)then
+                if(part_acinus_field(1+gen,nunit).gt.zero_tol)then
                    part_acinus_field(10+gen,nunit) = part_acinus_field(10+gen,nunit)+dt ! increase time particles spent in alveoli (in BBM(11..19,ne))
                 else
-                   part_acinus_field(10+gen,nunit) = 0 ! avoid division by zero
+                   part_acinus_field(10+gen,nunit) = 0.0_dp ! avoid division by zero
                 endif   ! part_acinus_field
-             enddo      ! for nine assumed acinar generations 
+             enddo      ! for nine assumed acinar generations
           endif         ! if a terminal element with acini attached
        enddo            ! noelem
 
@@ -1480,23 +1566,21 @@ contains
        ! add impaction with correction term
        Vdep(0) = Vdep(0) + Vdep(2) - Vdep(0) * Vdep(2)/Vtot   
        
-!       if(Vdep(0).gt.Vtot)then
-!         write(*,*) np,Vdep(0),Vdep(1),Vdep(2), Vdep(3),Vtot
-!      endif
-
        mass_loss_np = Vdep(0)*part_concentration(np)
        
-       !!! store the deposition quantities of each type
+!!! store the deposition quantities of each type
+       ! *MHT change* : the field names were mislabelled (Vdep(1) and Vdep(3) mixed up
+!!! Vdep(3) is diffusion, Vdep(2) is impaction, Vdep(1) is sedimentation
        node_field(nj_loss,np) = node_field(nj_loss,np)+mass_loss_np ! deposition quantity [g]
-       node_field(nj_loss_dif,np) = node_field(nj_loss_dif,np)+Vdep(1)*part_concentration(np) ! deposition quantity [g]
-       node_field(nj_loss_sed,np) = node_field(nj_loss_sed,np)+Vdep(2)*part_concentration(np) ! deposition quantity [g]
-       node_field(nj_loss_imp,np) = node_field(nj_loss_imp,np)+Vdep(3)*part_concentration(np) ! deposition quantity [g]
+       node_field(nj_loss_sed,np) = node_field(nj_loss_sed,np)+Vdep(1)*part_concentration(np) ! deposition quantity [g]
+       node_field(nj_loss_imp,np) = node_field(nj_loss_imp,np)+Vdep(2)*part_concentration(np) ! deposition quantity [g]
+       node_field(nj_loss_dif,np) = node_field(nj_loss_dif,np)+Vdep(3)*part_concentration(np) ! deposition quantity [g]
 
        !! assign new particle concentration to all nodes
        part_concentration(np) = (part_concentration(np)*Vtot - mass_loss_np)/Vtot
 
     enddo !np
-    
+
 !!! copy nj_source (concentration - deposition) field to nj_conc1 field
     node_field(nj_conc1,:) = part_concentration(:)
 
@@ -1510,7 +1594,7 @@ contains
 !!! ############################################################3
 !!! ############################################################3
 
-  subroutine acinus_transport(nunit,current_volume,dt,part_param)
+  subroutine acinus_transport(nunit,dt,part_param)
     
 !!! Evaluates particle transport in acini governed by convection diffusion equation
 !!! using FDM for 9 'virtual' nodes; using operator splitting (FDM for diffusion and
@@ -1530,13 +1614,13 @@ contains
     type(particle_parameters) :: part_param
 
     integer :: nunit
-    real(dp) :: current_volume,dt
+    real(dp) :: dt
 !!!     Local variables
-    integer :: ne,np,gen,genBEG,genEND,genSTEP
-    real(dp) :: radius(-1:9),conc(-1:9), &
+    integer :: i,ne,np,gen,genBEG,genEND,genSTEP
+    real(dp) :: current_volume,Lac_TLC_gen_p1,Lac_TLC_gen_p2,radius(-1:9),conc(-1:9), &
          volume(0:9),crossec(-1:9),veloc(0:9),abbr(6), &
-         deltaV(-1:9),volflow,courant,effDiffu, &
-         part_acinus_old(9)
+         deltaV(-1:9),volflow,vol_croot_scale,courant,effDiffu, &
+         part_acinus_old(9),alv_mass_end,alv_mass_start,scale_mass
     character(len=60) :: sub_name
     
     sub_name = 'acinus_transport'
@@ -1544,6 +1628,9 @@ contains
 
     ne = units(nunit)
     np = elem_nodes(2,ne) ! the distal node; adjacent to the acinus
+    current_volume = unit_field(nu_vol,nunit)
+    vol_croot_scale = (current_volume/part_param%VtotTLC)**(1.0_dp/3.0_dp)
+    alv_mass_start = unit_field(nu_vol,nunit)*unit_field(nu_conc1,nunit) - unit_field(nu_loss,nunit)
     
 !!! initialize parameter - CAUTION! FEM model and data above may not match (radius adapted)
     radius(0) = elem_field(ne_radius,ne)
@@ -1565,7 +1652,8 @@ contains
     deltaV(0) = 0.0_dp 
 
     ! difference of FEM-mesh and measurements (HAEFELI-BLEUER,1988)
-    abbr(1) = radius(0)-scale_radius_acinus(part_param%RacTLC(1),current_volume)
+!!    abbr(1) = radius(0)-scale_radius_acinus(part_param%RacTLC(1),current_volume)
+    abbr(1) = radius(0) - radius(0)*vol_croot_scale
 
     ! variable to store axial position for radius scaling
     abbr(2) = 0.0_dp 
@@ -1573,24 +1661,25 @@ contains
     ! ------------------------------------------------
     do gen = 1,9  ! loop over acinar generations
     ! ------------------------------------------------
-       abbr(2) = abbr(2)+part_param%LacTLC(gen+1)                                     ! axial position of node
-       radius(gen) = scale_radius_acinus(part_param%RacTLC(gen+1),current_volume)+ &     ! scale duct radius wrt. current acinar volume and 
-            (part_param%totacinarLength-abbr(2))/part_param%totacinarLength*abbr(1)                        !          linear scaling to adapt HBW to FEM mesh
+       abbr(2) = abbr(2)+part_param%LacTLC(gen+1)*vol_croot_scale                                     ! axial position of node
+       radius(gen) = part_param%RacTLC(gen+1)*vol_croot_scale + &     ! scale duct radius wrt. current acinar volume and 
+            (part_param%totacinarLength*vol_croot_scale-abbr(2))/(part_param%totacinarLength*vol_croot_scale)*abbr(1) !linear scaling to adapt HBW to FEM mesh
        crossec(gen) = pi*radius(gen)**2.0_dp*(2.0_dp**gen)               ! accumulated duct cross-sectional area    
        volume(gen) = DMAX1(part_param%VacTLC(gen)/part_param%VtotTLC*current_volume,0.0_dp)    ! linear scaling of volume
        deltaV(gen) = part_param%VacTLC(gen)/part_param%VtotTLC*deltaV(-1)                      ! volume change each generation within on time step
        conc(gen) = part_acinus_field(1+gen,nunit)                        ! concentration in acinar generations
        veloc(gen) = (veloc(gen-1)*crossec(gen-1)-deltaV(gen-1)/dt) &
                          /crossec(gen)                                   ! velocities corrected by volume change of previous generations
-       courant = abs(veloc(gen))*dt/part_param%LacTLC(gen+1)                          ! courant number for stability check
-       if(courant.ge.0.5_dp)then 
-          write(*,'(''Transport in acinar region may be unstable, Cr='',d12.3, &
-               '' decrease DT to at least '',d12.3,''s'')') &
-               courant,0.5_dp*part_param%LacTLC(gen+1)/abs(veloc(gen))                ! warning if CFL-condition is not fulfilled
-       endif
+       courant = abs(veloc(gen))*dt/(part_param%LacTLC(gen+1)*vol_croot_scale)                          ! courant number for stability check
+       !if(courant.ge.0.5_dp)then 
+          !write(*,'(''Transport in acinar region may be unstable, Cr='',d12.3, &
+          !     '' decrease DT to at least '',d12.3,''s'')') &
+          !     courant,0.5_dp*(part_param%LacTLC(gen+1)*vol_croot_scale)/abs(veloc(gen))                ! warning if CFL-condition is not fulfilled
+       !   min_dt = min(0.5_dp*(part_param%LacTLC(gen+1)*vol_croot_scale)/abs(veloc(gen)), min_dt)
+       !endif
        part_acinus_old(gen) = part_acinus_field(1+gen,nunit)                      ! store old concentrations
     enddo !gen
-
+       
 !!! define direction-explicit transport
     if(volflow.ge.0.0_dp)THEN
        genBEG = 1                                                      ! start generation convective transport
@@ -1603,7 +1692,7 @@ contains
        conc(-1) = node_field(nj_conc1,elem_nodes(1,ne))                ! concentration of proximal node of terminal element
        part_param%LacTLC(1) = elem_field(ne_length,ne)                         ! length of terminal element of 3D tree
        crossec(-1) = crossec(0)                                       ! cross-sectional area of proximal node of terminal element
-       volume(0) = crossec(0)*part_param%LacTLC(1)
+       volume(0) = crossec(0)*part_param%LacTLC(1)*vol_croot_scale
     endif
 
 !!! convective transport 
@@ -1621,22 +1710,21 @@ contains
     enddo
 
 !!! explicit FDM scheme - for diffusion
-    do gen = 1,9                                                         ! loop over acinar generations in alternating directions
-       effDiffu = part_param%diffu+0.0867_dp*abs(veloc(gen))*part_param%LacTLC(gen+1)            ! effective diffusivity acc. to. Lee(2001)
+    do gen = 1,9            ! loop over acinar generations in alternating directions
+       effDiffu = part_param%diffu+0.0867_dp*abs(veloc(gen))*part_param%LacTLC(gen+1)*vol_croot_scale            ! effective diffusivity acc. to. Lee(2001)
+       Lac_TLC_gen_p1 = part_param%LacTLC(gen+1) * vol_croot_scale
        if(gen.le.8)then                                                  ! inside domain use central scheme in space
-          abbr(1) = part_param%LacTLC(gen+1)*part_param%LacTLC(gen+2)*(part_param%LacTLC(gen+1)+part_param%LacTLC(gen+2))! abbreviation to reduce computational effort
-          abbr(2) = part_param%LacTLC(gen+1)*dt/volume(gen)/abbr(1)     
+          Lac_TLC_gen_p2 = part_param%LacTLC(gen+2) * vol_croot_scale
+          abbr(1) = part_param%LacTLC(gen+1)*part_param%LacTLC(gen+2)*(part_param%LacTLC(gen+1)+part_param%LacTLC(gen+2)) &
+               *vol_croot_scale**3.0_dp ! abbreviation to reduce computational effort
+          abbr(2) = part_param%LacTLC(gen+1)*dt/volume(gen)/abbr(1) * vol_croot_scale
           part_acinus_field(1+gen,nunit) = conc(gen)+abbr(2)*effDiffu* &
-               ((part_param%LacTLC(gen+1)**2.0_dp*(crossec(gen+1)-crossec(gen)) &
-               -part_param%LacTLC(gen+2)**2.0_dp*(crossec(gen)-crossec(gen-1))) &
-               *(part_param%LacTLC(gen+1)**2.0_dp*(conc(gen+1)-conc(gen)) &
-               -part_param%LacTLC(gen+2)**2.0_dp*(conc(gen)-conc(gen-1)))/abbr(1) &
-               +2.0_dp*crossec(gen)* &
-               (part_param%LacTLC(gen+1)*(conc(gen+1)-conc(gen)) &
-               -part_param%LacTLC(gen+2)*(conc(gen)-conc(gen-1))))                  ! FDM with central differences in space  
+               ((Lac_TLC_gen_p1**2.0_dp*(crossec(gen+1)-crossec(gen)) - Lac_TLC_gen_p2**2.0_dp*(crossec(gen)-crossec(gen-1))) &
+               *(Lac_TLC_gen_p1**2.0_dp*(conc(gen+1)-conc(gen)) - Lac_TLC_gen_p2**2.0_dp*(conc(gen)-conc(gen-1)))/abbr(1) &
+               +2.0_dp*crossec(gen)* (Lac_TLC_gen_p1*(conc(gen+1)-conc(gen)) - Lac_TLC_gen_p2*(conc(gen)-conc(gen-1))))                  ! FDM with central differences in space  
        else                                                              ! domain boundary use different scheme
-          abbr(1) = part_param%LacTLC(gen+1)**2.0_dp                                  ! abbreviation to reduce computational effort
-          abbr(2) = part_param%LacTLC(gen+1)*dt/volume(gen)/abbr(1)     
+          abbr(1) = Lac_TLC_gen_p1**2.0_dp                                  ! abbreviation to reduce computational effort
+          abbr(2) = Lac_TLC_gen_p1*dt/volume(gen)/abbr(1)     
           part_acinus_field(1+gen,nunit) = conc(gen)+abbr(2)*effDiffu* &
                (2.0_dp*crossec(gen)*(conc(gen-1)-conc(gen)))             ! FDM with entral differences in space at boundary (using condition dC/dx=0)
        endif
@@ -1644,19 +1732,21 @@ contains
 
 !!! assign new concentrations to 'part_acinus_field' and calculate average time particles spend in acinus
     do gen = 1,9                                        
-       if(part_acinus_field(1+gen,nunit).lt.0.0_dp) part_acinus_field(1+gen,nunit) = 0.0_dp
-       if((volflow.gt.0.0_dp).and.(part_acinus_field(1+gen,nunit).gt.0.0_dp))then  ! average time does not change when particles leave alveolus
+       if(part_acinus_field(1+gen,nunit).lt.zero_tol) part_acinus_field(1+gen,nunit) = 0.0_dp
+       if((volflow.gt.0.0_dp).and.(part_acinus_field(1+gen,nunit).gt.zero_tol))then  ! average time does not change when particles leave alveolus
           part_acinus_field(10+gen,nunit) = part_acinus_old(gen)*part_acinus_field(10+gen,nunit)* &
                (volume(gen)-deltaV(gen))/ &
                part_acinus_field(1+gen,nunit)/volume(gen)                   ! calculate new average time partices spent in alveoli (in part_acinus_field(11..19,ne))
-       elseif(part_acinus_field(1+gen,nunit).le.0.0_dp)then                 ! concentration is zero
+       elseif(part_acinus_field(1+gen,nunit).le.zero_tol)then                 ! concentration is zero
           part_acinus_field(10+gen,nunit)=0.0_dp                            ! reset time
        endif ! volflow
     enddo
 
 !!! for exhalation calculate concentration of terminal node of branching tree
     if(volflow.lt.0)then                                                 ! exhalation
+       write(*,*) 'warning: exhalation wrong in acinus_transport'
        gen = 0
+       effDiffu = part_param%diffu+0.0867_dp*abs(veloc(gen))*part_param%LacTLC(gen+1)            ! effective diffusivity acc. to. Lee(2001)
        effDiffu = part_param%diffu+0.0867_dp*abs(veloc(gen))*part_param%LacTLC(gen+1)            ! effective diffusivity acc. to. Lee(2001)
 
        abbr(1) = part_param%LacTLC(gen+1)*part_param%LacTLC(gen+2)*&
@@ -1676,6 +1766,19 @@ contains
            write(*,'(''ACIN_TRANSP exhaling concentration < 0 ='',d12.3)') node_field(nj_conc1,np)
           node_field(nj_conc1,np) = 0.0_dp
        endif
+    endif
+
+    ! scale the concentrations to maintain acinar mass as per the unit mass
+    alv_mass_end = 0.0_dp
+    do i = 1,9
+       alv_mass_end = alv_mass_end + part_acinus_field(1+i,nunit)* &
+            (part_param%VacTLC(i) * unit_field(nu_vol,nunit)/part_param%VtotTLC)
+    enddo
+    if(alv_mass_end.gt.zero_tol)then
+       scale_mass = alv_mass_start/alv_mass_end
+       do i = 1,9
+          part_acinus_field(1+i,nunit) = part_acinus_field(1+i,nunit) * scale_mass
+       enddo
     endif
 
     call enter_exit(sub_name,2)
@@ -1712,7 +1815,8 @@ contains
 
 !#########################################################################
 
-  subroutine calc_mass_particles(nj,nu_field,gas_mass,deposit_mass,mass_by_gen,unit_mass)
+  subroutine calc_mass_particles(nj,nu_field,gas_mass,deposit_mass,mass_by_gen, &
+       part_param,unit_mass,unit_wall)
     
 !   use arrays, only: dp,num_nodes,elem_nodes,node_field,elem_ordrs,&
 !                     elem_field,elem_symmetry,num_elems
@@ -1723,10 +1827,11 @@ contains
     implicit none
   
     integer,intent(in) :: nj,nu_field
-    real(dp) :: gas_mass,deposit_mass,mass_by_gen(:),unit_mass
+    type(particle_parameters) :: part_param
+    real(dp) :: gas_mass,deposit_mass,mass_by_gen(:),unit_mass,unit_wall
     !     Local Variables
     integer :: i,ne,ne0,ngen,nmax_gen,np,np1,np2,nunit
-    real(dp) :: average_conc,sum_mass,vol_by_gen(50)
+    real(dp) :: average_conc,sum_mass,total_mass,vol_by_gen(50)
     real(dp),allocatable :: tree_mass(:),unit_tree_mass(:),wall_mass(:),unit_wall_mass(:)
     character(len=60):: sub_name
 
@@ -1747,9 +1852,6 @@ contains
     mass_by_gen = 0.0_dp
     vol_by_gen = 0.0_dp
 
-    !print *, 'num_elems', num_elems !61360
-    !print *, 'num_units',num_units ! 30676
-
     ! initialise to the mass in each element
     do ne = 1,num_elems
        np1 = elem_nodes(1,ne)
@@ -1758,42 +1860,36 @@ contains
        tree_mass(ne) = average_conc*elem_field(ne_vol,ne) ! mmol/mm^3 * mm^3
        wall_mass(ne) = node_field(nj_loss,np1)/real(elems_at_node(np1,0)) + &
             node_field(nj_loss,np2)/real(elems_at_node(np2,0))
-       !wall_mass(ne) = (node_field(nj_loss,np1)+node_field(nj_loss,np2))/2.0_dp
        elem_field(ne_mass,ne) = tree_mass(ne)
        ngen = elem_ordrs(1,ne)
-       mass_by_gen(ngen) = mass_by_gen(ngen) + tree_mass(ne)
+       mass_by_gen(ngen) = mass_by_gen(ngen) + wall_mass(ne) + tree_mass(ne)
        vol_by_gen(ngen) = vol_by_gen(ngen) + elem_field(ne_vol,ne)
     enddo
     nmax_gen = maxval(elem_ordrs(1,:))
-    !print *, 'nmax_gen', nmax_gen ! 27
 
     ! add the mass in each elastic unit to terminal elements
     do nunit = 1,num_units
        ne = units(nunit)
-       tree_mass(ne) = tree_mass(ne) + &
-            unit_field(nu_vol,nunit)*unit_field(nu_field,nunit)
-       unit_tree_mass(ne) = unit_tree_mass(ne) + &
-               unit_field(nu_vol,nunit)*unit_field(nu_field,nunit)
+       unit_tree_mass(ne) = unit_field(nu_vol,nunit)*unit_field(nu_field,nunit) &
+            - unit_field(nu_loss,nunit) ! units of mass
+       unit_wall_mass(ne) = unit_field(nu_loss,nunit)      ! units of mass
     enddo
-    !print *,'nu_field', SUM(unit_field(nu_field,:))
+
     ! sum mass recursively up the tree
     do ne = num_elems,2,-1 ! not for the stem branch; parent = 0
        ne0 = elem_cnct(-1,1,ne)
        tree_mass(ne0) = tree_mass(ne0) + dble(elem_symmetry(ne))*tree_mass(ne)
        wall_mass(ne0) = wall_mass(ne0) + dble(elem_symmetry(ne))*wall_mass(ne)
        unit_tree_mass(ne0) = unit_tree_mass(ne0) + dble(elem_symmetry(ne))*unit_tree_mass(ne)
+       unit_wall_mass(ne0) = unit_wall_mass(ne0) + dble(elem_symmetry(ne))*unit_wall_mass(ne)
        elem_field(ne_mass,ne0) = elem_field(ne_mass,ne0) + dble(elem_symmetry(ne))*elem_field(ne_mass,ne)
     enddo !noelem
 
-    gas_mass = tree_mass(1)
-    !print *, 'tree mass', size(tree_mass) = 61361
-    !write(*,*) 'gas mass', gas_mass
-    deposit_mass = wall_mass(1)
-    unit_mass = unit_tree_mass(1)
-    !write(*,*) 'deposit mass', deposit_mass
+    gas_mass = tree_mass(1)        ! mass in lumen of bronchi
+    deposit_mass = wall_mass(1)    ! mass on walls of bronchi
+    unit_mass = unit_tree_mass(1)  ! mass in the lumen of the acini
+    unit_wall = unit_wall_mass(1)  ! mass on alveolar walls
 
-    !write(*,'(''  Vol in generations: '',10(f12.4))') (vol_by_gen(i),i=1,10)
-    
     deallocate(tree_mass)
     deallocate(unit_tree_mass)
     deallocate(wall_mass)
@@ -1872,7 +1968,7 @@ contains
             select case(model_type)
               case('particle_transport')
              ! for problem type particles
-               call acinus_transport(nunit,current_volume,dt,part_param) !ARC - query, should be current (whole lung) or acinus volume? 
+               call acinus_transport(nunit,dt,part_param)
              end select
           endif
        endif
@@ -1932,6 +2028,43 @@ contains
   
 !#########################################################################
 
+  function branch_length(ne)
+!!! dummy arguments
+    integer :: ne
+    ! local variables
+    integer :: generation,ne0
+    real(dp) :: length
+    logical :: continue
+    real(dp) branch_length
+
+    generation = elem_ordrs(1,ne)
+    length = elem_field(ne_length,ne)
+    ne0 = elem_cnct(-1,1,ne)
+    continue = .true.
+    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    
+    do while(continue)
+       length = length + elem_field(ne_length,ne0)
+       ne0 = elem_cnct(-1,1,ne0)
+       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    enddo
+
+    ne0 = elem_cnct(1,1,ne)
+    continue = .true.
+    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+
+    do while(continue)
+       length = length + elem_field(ne_length,ne0)
+       ne0 = elem_cnct(1,1,ne0)
+       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    enddo
+
+    branch_length = length
+
+  end function branch_length
+
+!#########################################################################
+
   function inlist(item,ilist)
 !!! dummy arguments
     integer :: item,ilist(:)
@@ -1962,5 +2095,28 @@ contains
   end function where_inlist
 
 
+  ! #################################################################
+
+  function element_top_of_branch(ne)
+    integer :: ne
+    ! local variables
+    integer :: generation,ne0
+    logical :: continue
+    integer :: element_top_of_branch
+    
+    element_top_of_branch = ne
+    generation = elem_ordrs(1,ne)
+    ne0 = elem_cnct(-1,1,ne)
+    continue = .true.
+    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    
+    do while(continue)
+       element_top_of_branch = ne0
+       ne0 = elem_cnct(-1,1,ne0)
+       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    enddo
+    
+  end function element_top_of_branch
+  
 ! #################################################################
 end module particle_transport
