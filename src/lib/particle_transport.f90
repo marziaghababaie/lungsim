@@ -1357,7 +1357,7 @@ contains
                 alpha = angle_btwn_points(B,A,C)-pi ! calculate angle between parent and daughter tube axis
              
                 if(abs(sin(alpha)).gt.zero_tol)then
-          !*MHT  -original
+          !*MHT  -original ! TJ change back
                    abbr(1) = 18.0_dp*part_param%mu/part_param%prho&
                                                   /part_param%pdia**2.0_dp&
                                                   /abs(sin(alpha))
@@ -1397,7 +1397,7 @@ contains
              
 !!! TLC volume-dependent average diameter of an alveolus (Weibel, 1962)
 !!! original used total lung volume. here we assume 2^15 acini
-             Dalv = 1.54e-3_dp * (current_volume*2.0_dp**15)**(1.0_dp/3.0_dp) !ARC should be of acinar volume only?  ! *MHT change*
+             !Dalv = 1.54e-3_dp * (current_volume*2.0_dp**15)**(1.0_dp/3.0_dp) !ARC should be of acinar volume only?  ! *MHT change*
              Dalv = 0.154_dp  ! *MHT change*
 !!! inner radius for diffusion in alveoli related to inlet diameter (Hansen 1975)   
              Rin = Dalv*0.325_dp   
