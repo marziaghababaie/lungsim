@@ -90,7 +90,7 @@ contains
     part_param%diffusion_coeff = 22.5_dp
     !part_param%pdia = 0.4e-5_dp
     !part_param%pdia = 1.0_dp * 1.0e-3_dp  ! micron --> mm
-    part_param%pdia = 0.04_dp * 1.0e-3_dp  ! micron --> mm
+    part_param%pdia = 0.08_dp * 1.0e-3_dp  ! micron --> mm
     part_param%dt_gm = 0.02_dp
     part_param%VtotTLC = 186.89_dp
     part_param%totacinarLength = 7.73_dp
@@ -153,8 +153,9 @@ contains
     write(*,'('' Anatomical deadspace = '',F8.3,'' ml'')') volume_tree/1.0e+3_dp ! in mL
     write(*,'('' Respiratory volume   = '',F8.3,'' L'')') (part_param%initial_volume-volume_tree)/1.0e+6_dp !in L
     write(*,'('' Total lung volume    = '',F8.3,'' L'')') part_param%initial_volume/1.0e+6_dp !in L
-    write(*,'('' Inlet flow           = '',f8.3,'' L.s^-1'')') abs(elem_field(ne_Vdot,1))/1.0e6_dp
+    write(*,'('' Inlet flow           = '',f8.3,'' L.s^-1'')') abs(elem_field(ne_Vdot,1))/1.0e+6_dp
     write(*,'('' Inlet concentration  = '',f8.3,'' g.mm^-3'')') node_field(nj_conc1,1)
+    write(*,'('' Particle size        = '',f8.3,'' micron m^-3'')') (part_param%pdia * 1.0e+3_dp)
 
      op_name = 'file_particle' !ARC TEMP placeholder
     ! print *, 'op_name is', op_name
@@ -440,7 +441,7 @@ contains
 
        dep_eff_alv = unit_wall/current_mass
        dep_eff_bronch = mass_deposit/current_mass
-       
+
        if(write_mass)then
           write(*,'(f7.3,3(f8.3),f10.2,7(f9.2),f10.5,'' |'',16(f6.1))') &
                time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
@@ -497,8 +498,8 @@ contains
          sum(node_field(nj_loss_imp,1:num_nodes))
     write(*,'(5x, ''Totals--      '',5x, f8.3, 15x, f8.3)') dep_eff_bronch, dep_eff_alv
     write(*,'(''---------------------------------------'')')
-    
-    
+    print *, "alter", unit_wall/(unit_mass + unit_wall)
+
     call enter_exit(sub_name,2)
   end subroutine solve_particles
   
@@ -1254,7 +1255,8 @@ contains
          npstep,np0,np1,np2,np3,nunit
     real(dp) :: A(3),abbr(9),abbr_t1,abbr_t2,alpha,Atube,B(3),C(3),coeffDiffSph(1:1000,2), &
          crossec(0:9),current_volume,Dalv,deltaV(-1:9),DepFrac(4:6),h,j2,lduct,length,radius(0:9),Rin, &
-         unit_loss,Vdep(0:6),Vduct(0:9),veloc(0:9),vfluid,volume(9),vol_croot_scale,Vtot,Vtube,Z(3)
+         unit_loss,Vduct(0:9),veloc(0:9),vfluid,volume(9),vol_croot_scale,Vtot,Vtube,Z(3)!Vdep(0:6),
+    real(dp) :: Vdep(0:7) ! TJ add sedimentation in alveoli
     real(dp) :: mass_loss_np,mean_conc,part_acinus_old(9)
     real(dp),allocatable :: part_concentration(:)
     logical :: acinar_deposition = .true., flag
@@ -1316,16 +1318,17 @@ contains
           z(3) = -1.0_dp  ! *MHT change*
           alpha = abs(angle_btwn_vectors(B-A,Z)) ! calculate angle between tube axis and gravity vector! *MHT change*
 
-!!! sedimentation
-          !*MHT  -original
-!          Vdep(1) = Vdep(1) + abs(sin(alpha))*part_param%prho*&  
-!                              part_param%gravityy* & 
-!                              part_param%pdia**2.0_dp*&
-!                         length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
+!! sedimentation
+          ! *MHT  -original ! TJ change back, should be prho (the density of the sphere)
+          Vdep(1) = Vdep(1) + abs(sin(alpha))*part_param%prho* 9.81e3_dp * &
+                              part_param%pdia**2.0_dp*&
+                         length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
           ! *MHT change*
-          mean_conc = 0.5_dp * (node_field(nj_conc1,np) + node_field(nj_conc1,np2))
-          Vdep(1) = Vdep(1) + abs(sin(alpha)) * mean_conc * 9.81e3_dp * part_param%pdia**2.0_dp * &
-               length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
+!          mean_conc = 0.5_dp * (node_field(nj_conc1,np) + node_field(nj_conc1,np2))
+!!          Vdep(1) = Vdep(1) + abs(sin(alpha)) * mean_conc * 9.81e3_dp * part_param%pdia**2.0_dp * &
+!!               length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
+!          Vdep(1) = Vdep(1) + abs(sin(alpha)) * mean_conc * 9.81e3_dp * part_param%pdia**2.0_dp * &
+!               length*dt/18.0_dp/part_param%mu ! deposition volume due to sedimentation ! TJ change
 
 !!! impaction
 !!! MHT *change: should be using the angle between an unfrefined branch and its parent, then taking
@@ -1355,13 +1358,13 @@ contains
              
                 if(abs(sin(alpha)).gt.zero_tol)then
           !*MHT  -original
-!                   abbr(1) = 18.0_dp*part_param%mu/part_param%prho&
-!                                                  /part_param%pdia**2.0_dp&
-!                                                  /abs(sin(alpha))
-          ! *MHT change*
-                   abbr(1) = 18.0_dp*part_param%mu/mean_conc &
+                   abbr(1) = 18.0_dp*part_param%mu/part_param%prho&
                                                   /part_param%pdia**2.0_dp&
                                                   /abs(sin(alpha))
+          ! *MHT change*
+!                   abbr(1) = 18.0_dp*part_param%mu/mean_conc &
+!                                                  /part_param%pdia**2.0_dp&
+!                                                  /abs(sin(alpha))
                    h = 2.0_dp*abs(sin(alpha))/lduct*abs(vfluid)/ &
                         abbr(1)*abs(elem_field(ne_part_vel,ne))/ &   !!! warning: note that cmiss used nodal value for particle velocity
                         abs(elem_field(ne_radius,ne))**2.0_dp/pi  !!! but only one version for value (??)
@@ -1466,15 +1469,21 @@ contains
 
 
 !!!!............ sedimentation in alveolar tissue
+
+                ! TJ - add EQN (56)
+                Vdep(7) = Vdep(7)+ pi * part_param%prho *9.81e3_dp &
+                        *part_param%pdia**2.0_dp *dt *Dalv**2 &
+                        /72.0_dp/part_param%mu
+
                 ! deposition fraction due to sedimentation (0.853d0 is area correction ChoiKim2007) 
-!                DepFrac(5) = part_param%prho &
-!                             *9.81e3_dp & !part_param%gravityy &
-!                             *part_param%pdia**2.0_dp &
-!                             *dt/12.0_dp/part_param%mu/Dalv*0.853_dp
-                DepFrac(5) = part_acinus_field(1+gen,nunit) &
+                DepFrac(5) = part_param%prho &
                              *9.81e3_dp & !part_param%gravityy &
                              *part_param%pdia**2.0_dp &
-                             *dt/12.0_dp/part_param%mu/Dalv  !*0.853_dp
+                             *dt/12.0_dp/part_param%mu/Dalv!*0.853_dp
+!                DepFrac(5) = part_acinus_field(1+gen,nunit) &
+!                             *9.81e3_dp & !part_param%gravityy &
+!                             *part_param%pdia**2.0_dp &
+!                             *dt/12.0_dp/part_param%mu/Dalv  !*0.853_dp
 
                 ! sum deposition fractions without mutually eliminating part
                 DepFrac(6) = DepFrac(4)/2.0_dp+DepFrac(5)+DMAX1(DepFrac(4)/2.0_dp-DepFrac(5),0.0_dp)
@@ -1487,6 +1496,7 @@ contains
                 if(gen.ge.1)THEN ! by increasing number, deposition in tubes can be taken into account
                    Vdep(4:6) = 0.0_dp
                    Vdep(5) = 0.0_dp
+
                 else
                    ! volume change each generation within on time step
                    deltaV(gen) = part_param%VacTLC(gen)/part_param%VtotTLC*deltaV(-1) 
@@ -1496,16 +1506,18 @@ contains
                    !
                    !! Sedimentation in ducts
                    ! deposition volume due to sedimentation (statistic orientation to gravity)
-!                   Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
-!                        *part_param%prho &
-!                        *9.81e3_dp & !*part_param%gravityy &
-!                        *part_param%pdia**2.0_dp &
-!                        *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun 
+                   ! TJ - change back
                    Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
-                        *part_acinus_field(1+gen,nunit) &
+                        *part_param%prho &
                         *9.81e3_dp & !*part_param%gravityy &
                         *part_param%pdia**2.0_dp &
-                        *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun 
+                        *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun
+
+!                   Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
+!                        *part_acinus_field(1+gen,nunit) &
+!                        *9.81e3_dp & !*part_param%gravityy &
+!                        *part_param%pdia**2.0_dp &
+!                        *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun
                    
                    !!Brownian diffusion (average travelling distance within duct)
                    h = 2.0_dp/3.0_dp*(4.0_dp*part_param%diffu*part_param%LacTLC(gen+1)*vol_croot_scale&
@@ -1520,7 +1532,8 @@ contains
                       
                       !!Total alveolar deposition
                       ! sum deposition volumes without mutually eliminating volume
-                      Vdep(6) = Vdep(4)/2.0_dp+Vdep(5)+DMAX1(Vdep(4)/2.0_dp-Vdep(5),0.0_dp)
+!                      Vdep(6) = Vdep(4)/2.0_dp+Vdep(5)+DMAX1(Vdep(4)/2.0_dp-Vdep(5),0.0_dp)
+                       Vdep(6) = Vdep(4)/2.0_dp + (Vdep(7)+Vdep(5)) + DMAX1(Vdep(4)/2.0_dp-(Vdep(7)+Vdep(5)),0.0_dp) !TJ change
                    endif
                    !                   
                    do j = 4,6
@@ -1546,8 +1559,10 @@ contains
                 unit_field(nu_loss,nunit) = unit_field(nu_loss,nunit) + unit_loss ! store deposition quantity (mass in [g])
                 unit_field(nu_loss_dif,nunit) = unit_field(nu_loss_dif,nunit) + Vdep(4)*part_acinus_field(1+gen,nunit) &
                      +volume(gen)*DepFrac(4)*part_acinus_field(MIN(gen+2,10),nunit) ! store diffusion quantity (mass in [g])
-                unit_field(nu_loss_sed,nunit) = unit_field(nu_loss_sed,nunit) + Vdep(5)*part_acinus_field(1+gen,nunit) &
+                unit_field(nu_loss_sed,nunit) = unit_field(nu_loss_sed,nunit) + (Vdep(7)+Vdep(5))*part_acinus_field(1+gen,nunit) &
                      +volume(gen)*DepFrac(5)*part_acinus_field(MIN(gen+2,10),nunit) ! store sedimentaion quantity (mass in [g])
+!                unit_field(nu_loss_sed,nunit) = unit_field(nu_loss_sed,nunit) + Vdep(5)*part_acinus_field(1+gen,nunit) &
+!                     +volume(gen)*DepFrac(5)*part_acinus_field(MIN(gen+2,10),nunit) ! store sedimentaion quantity (mass in [g])
 
                 part_acinus_field(1+gen,nunit) = part_acinus_field(1+gen,nunit)-volume(gen)*DepFrac(6)/(volume(gen)+Vduct(gen)) &
                      *part_acinus_field(MIN(gen+2,10),nunit)-Vdep(6)/(volume(gen)+Vduct(gen))*part_acinus_field(1+gen,nunit) ! assign new concentration acini
@@ -1567,7 +1582,7 @@ contains
        Vdep(0) = Vdep(0) + Vdep(2) - Vdep(0) * Vdep(2)/Vtot   
        
        mass_loss_np = Vdep(0)*part_concentration(np)
-       
+
 !!! store the deposition quantities of each type
        ! *MHT change* : the field names were mislabelled (Vdep(1) and Vdep(3) mixed up
 !!! Vdep(3) is diffusion, Vdep(2) is impaction, Vdep(1) is sedimentation
