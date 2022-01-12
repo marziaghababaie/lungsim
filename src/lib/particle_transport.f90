@@ -90,7 +90,7 @@ contains
     part_param%diffusion_coeff = 22.5_dp
     !part_param%pdia = 0.4e-5_dp
     !part_param%pdia = 1.0_dp * 1.0e-3_dp  ! micron --> mm
-    part_param%pdia = 0.08_dp * 1.0e-3_dp  ! micron --> mm
+    part_param%pdia = 5.0_dp * 1.0e-3_dp  ! micron --> mm
     part_param%dt_gm = 0.02_dp
     part_param%VtotTLC = 186.89_dp
     part_param%totacinarLength = 7.73_dp
@@ -1493,11 +1493,11 @@ contains
                    endif
                 enddo !j
        
-                if(gen.ge.1)THEN ! by increasing number, deposition in tubes can be taken into account
-                   Vdep(4:6) = 0.0_dp
-                   Vdep(5) = 0.0_dp
-
-                else
+!                if(gen.ge.1)THEN ! by increasing number, deposition in tubes can be taken into account
+!                   Vdep(4:6) = 0.0_dp
+!                   Vdep(5) = 0.0_dp
+!
+!                else
                    ! volume change each generation within on time step
                    deltaV(gen) = part_param%VacTLC(gen)/part_param%VtotTLC*deltaV(-1) 
                    
@@ -1544,7 +1544,7 @@ contains
                       endif
                       if(Vdep(j).ne.Vdep(j)) Vdep(j) = 0.0_dp ! function ISNAN does not work
                    enddo !j
-                endif !gen.LT.9
+               ! endif !gen.LT.9
                 
                 if(part_acinus_field(1+gen,nunit).ge.0.0_dp)then
                    ! NOTHING because thsi way NaN values are covered too
