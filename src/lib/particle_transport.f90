@@ -1878,6 +1878,8 @@ contains
        wall_mass(ne) = node_field(nj_loss,np1)/real(elems_at_node(np1,0)) + &
             node_field(nj_loss,np2)/real(elems_at_node(np2,0))
        elem_field(ne_mass,ne) = tree_mass(ne)
+       elem_field(ne_loss,ne) = wall_mass(ne)/ &
+            (pi*2.0_dp*elem_field(ne_radius,ne)*elem_field(ne_length,ne))
        ngen = elem_ordrs(1,ne)
        mass_by_gen(ngen) = mass_by_gen(ngen) + wall_mass(ne) + tree_mass(ne)
        vol_by_gen(ngen) = vol_by_gen(ngen) + elem_field(ne_vol,ne)

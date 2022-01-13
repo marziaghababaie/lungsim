@@ -493,7 +493,7 @@ contains
        open(10, file=EXNODEFILE, status='replace')
        !**     write the group name
        write(10,'( '' Group name: '',A)') name(:len_end)
-       
+       VALUE_INDEX = 1
        select case (model_type)
        case ('particle_transport')
           write(10,'( '' #Fields=4'' )')
@@ -505,8 +505,8 @@ contains
              write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
              VALUE_INDEX=VALUE_INDEX+1
           enddo
-          !Tidal volume
-          write(10,'('' 2) tidal_volume, field, rectangular cartesian, #Components=1'')')
+          !Time averaged flow rate
+          write(10,'('' 2) average_flow, field, rectangular cartesian, #Components=1'')')
           write(10,'(2X,''1.  '')',advance="no")
           write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
           VALUE_INDEX=VALUE_INDEX+1
@@ -562,7 +562,7 @@ contains
           enddo !njj2
           select case (model_type)
           case ('particle_transport')
-             write(10,'(2X,4(1X,F12.6))') (unit_field(nu_vt,nolist))   
+             write(10,'(2X,4(1X,F12.6))') (unit_field(nu_vdot0,nolist))   
              write(10,'(2X,4(1X,F12.6))') (unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist)) 
              write(10,'(2X,4(1X,F12.6))') (unit_field(nu_loss,nolist)) 
           case ('ventilation')

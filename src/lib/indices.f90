@@ -28,7 +28,7 @@ module indices
        ne_resist=0,ne_t_resist=0,ne_Vdot=0,ne_Vdot0=0,ne_a_A=0,&
        ne_dvdt=0,ne_radius_in=0,ne_radius_in0=0,&
        ne_radius_out=0,ne_radius_out0=0,ne_group=0,ne_Qdot=0, &
-       ne_vd_bel=0, ne_vol_bel=0
+       ne_vd_bel=0, ne_vol_bel=0, ne_loss = 0
   ! indices for unit_field
   integer :: num_nu,nu_vol=0,nu_comp=0,nu_conc2=0,nu_Vdot0=0,nu_Vdot1=0, &
        nu_Vdot2=0,nu_dpdt=0,nu_pe=0,nu_vt=0,nu_air_press=0,nu_conc1=0,nu_vent=0,&
@@ -64,7 +64,7 @@ module indices
        ne_resist,ne_t_resist,ne_Vdot,ne_Vdot0,ne_a_A,&
        ne_dvdt,ne_radius_in,ne_radius_in0,ne_radius_out,&
        ne_radius_out0,ne_group,ne_Qdot, &
-       ne_vd_bel, ne_vol_bel
+       ne_vd_bel, ne_vol_bel, ne_loss
   
   public num_nu,nu_vol,nu_comp, nu_conc2,nu_Vdot0,nu_Vdot1, &
        nu_Vdot2,nu_dpdt,nu_pe,nu_vt,nu_air_press,&
@@ -304,7 +304,7 @@ contains
     nj_loss_imp=9
     
     ! indices for elem_field
-    num_ne=12
+    num_ne=13
     ne_radius=1
     ne_length=2
     ne_vol=3
@@ -317,6 +317,7 @@ contains
     ne_part_vel = 10
     ne_vd_bel = 11
     ne_vol_bel = 12
+    ne_loss = 13
 
     ! indices for unit_field
     num_nu=12
