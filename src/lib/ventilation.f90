@@ -911,9 +911,9 @@ contains
     character,intent(out) :: expiration_type*(*)
 
     ! Local variables
-    character(len=100) :: buffer, label
+    character(len=100) :: buffer, ioerrmsg, label
     integer :: pos
-    integer, parameter :: fh = 15
+    integer, parameter :: fh = 95
     integer :: ios
     integer :: line
     character(len=60) :: sub_name
@@ -939,14 +939,15 @@ contains
     !    expiration_type = 'passive' ! or 'active'
     !    chest_wall_compliance = 0.2e6_dp/98.0665_dp !(0.2 L/cmH2O --> mm^3/Pa)
 
-    open(fh, file='Parameters/params_evaluate_flow.txt')
+    open(fh, file='Parameters/params_evaluate_flow.txt', status='OLD')
 
     ! ios is negative if an end of record condition is encountered or if
     ! an endfile condition was detected.  It is positive if an error was
     ! detected.  ios is zero otherwise.
 
     do while (ios == 0)
-       read(fh, '(A)', iostat=ios) buffer
+       read(fh, '(A)', iostat=ios, iomsg=ioerrmsg) buffer
+       
        if (ios == 0) then
           line = line + 1
 

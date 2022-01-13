@@ -3324,8 +3324,8 @@ contains
     
     random_number=-1.1_dp
     
-    Vmax = Rmax * (total_volume-volume_estimate)/elem_units_below(1)
-    Vmin = Rmin * (total_volume-volume_estimate)/elem_units_below(1)
+    Vmax = Rmax * (total_volume-volume_of_tree)/elem_units_below(1)
+    Vmin = Rmin * (total_volume-volume_of_tree)/elem_units_below(1)
     
 !!! for each elastic unit find the maximum and minimum coordinates in the Gdirn direction
     max_z=-1.0e+6_dp
@@ -3358,9 +3358,10 @@ contains
     do nunit=1,num_units
        unit_field(nu_vol,nunit) = unit_field(nu_vol,nunit)*factor_adjust
     enddo
+    call volume_of_mesh(volume_estimate,volume_of_tree)
     
     write(*,'('' Number of elements is '',I5)') num_elems
-    write(*,'('' Initial volume is '',F6.2,'' L'')') total_volume/1.0e+6_dp
+    write(*,'('' Initial volume is '',F6.2,'' L'')') volume_estimate/1.0e+6_dp
     write(*,'('' Deadspace volume is '',F6.1,'' mL'')') volume_of_tree/1.0e+3_dp
     
     call enter_exit(sub_name,2)

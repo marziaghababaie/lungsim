@@ -24,7 +24,7 @@ module particle_transport
 
 contains
 
-  subroutine solve_particles_decoupled(initial_concentration, inlet_concentration)
+  subroutine solve_particles_decoupled(initial_concentration, inlet_concentration, particle_size)
 
 !!!##########################################################################
 !!!##########################################################################
@@ -48,6 +48,7 @@ contains
     implicit none
     real(dp), intent(in) :: initial_concentration
     real(dp), intent(in) :: inlet_concentration
+    real(dp), intent(in) :: particle_size
   
     type(particle_parameters) :: part_param
     type(transport_parameters) :: tp
@@ -90,7 +91,8 @@ contains
     part_param%diffusion_coeff = 22.5_dp
     !part_param%pdia = 0.4e-5_dp
     !part_param%pdia = 1.0_dp * 1.0e-3_dp  ! micron --> mm
-    part_param%pdia = 5.0_dp * 1.0e-3_dp  ! micron --> mm
+    !part_param%pdia = 5.0_dp * 1.0e-3_dp  ! micron --> mm
+    part_param%pdia = particle_size * 1.0e-3_dp  ! micron --> mm
     part_param%dt_gm = 0.02_dp
     part_param%VtotTLC = 186.89_dp
     part_param%totacinarLength = 7.73_dp
