@@ -1495,10 +1495,10 @@ contains
                    endif
                 enddo !j
        
-!                if(gen.ge.1)THEN ! by increasing number, deposition in tubes can be taken into account
+!                if(gen.LT.9)THEN ! by increasing number, deposition in tubes can be taken into account
 !                   Vdep(4:6) = 0.0_dp
 !                   Vdep(5) = 0.0_dp
-!
+!!
 !                else
                    ! volume change each generation within on time step
                    deltaV(gen) = part_param%VacTLC(gen)/part_param%VtotTLC*deltaV(-1) 
@@ -1546,7 +1546,7 @@ contains
                       endif
                       if(Vdep(j).ne.Vdep(j)) Vdep(j) = 0.0_dp ! function ISNAN does not work
                    enddo !j
-               ! endif !gen.LT.9
+!                endif !gen.LT.9
                 
                 if(part_acinus_field(1+gen,nunit).ge.0.0_dp)then
                    ! NOTHING because thsi way NaN values are covered too
