@@ -508,8 +508,8 @@ contains
     write(*,'(5x, ''Totals--      '',5x, f8.3, 15x, f8.3)') dep_eff_bronch, dep_eff_alv
     write(*,'(''---------------------------------------'')')
 
-    call write_terminal('hi', name)
-    call write_airway(ne_field,'hello', groupname, field_name)
+    call write_terminal('terminal', name)
+    call write_airway(ne_field, 'airway_result', groupname, field_name)
     !print *, "alter", unit_wall/(unit_mass + unit_wall)
 
     call enter_exit(sub_name,2)
@@ -533,17 +533,17 @@ contains
         type(particle_parameters) :: part_param
         type(transport_parameters) :: tp
             integer :: len_end,ne
-            integer :: np0, np1, np2, ne_field, nj
+            integer :: np0, np1, np2, ne_field, nj, ne0, ne_stem
             real(dp) :: midpoint(3)
             logical :: CHANGED
             character(len=300) :: writefile
             character(len=60) :: sub_name, groupname, field_name, filename
+        character(LEN=10) :: lobe
         integer :: ifile=10
         character :: readfile*150
         groupname = 'vent_model'
         field_name = 'bronchial_deposition'
         ne_field = 13
-        !export_1d_elem_field(ne_depos, filename + '_depos_field.exelem', groupname, field_name)
         np0 = 1
 
         if(index(filename, ".txt")>0)then ! full filename is given
@@ -558,55 +558,49 @@ contains
           write(10,'(1X,''Element: '',I12,'' 0 0'' )') ne
           np1 = elem_nodes(1,ne)
           np2 = elem_nodes(2,ne)
-          write(10,'(2X,4(1X,F12.6))') (node_xyz(:, np1) + node_xyz(:, np2))/2
+          write(10,'(2X,''Element: '', 4(1X,F12.6))') (node_xyz(:, np1) + node_xyz(:, np2))/2
           midpoint(:) = (node_xyz(:, np1) + node_xyz(:, np2))/2
-          write(10,'(f7.3,  I2, I2, '' |'', A, 3(f8.3),f10.2,7(f9.2),f10.5,16(f6.1),f10.2,f10.2)') &
-                  sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)),& ! distance
-                  elem_ordrs(1,ne), elem_ordrs(2,ne), ' lobe: ???', elem_field(ne_length,ne), &
+
+          ne0 = element_lobe(ne)
+
+!          write(10,'(1X,''Distance to entrance: '', f7.3)') sqrt(sum((midpoint(:) - node_xyz(:, np0))**2))
+!          write(10,'(1X,''Generation: '', I2)') elem_ordrs(1,ne)
+!          write(10,'(1X,''Horsfield order: '', I2)') elem_ordrs(2,ne)
+          write(10,'(f7.3, '' |'',  I2, I2, '' |'',  f7.3, f7.2, f7.2, f7.2, f7.2, f10.2, f10.2)') &
+                  sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)), & ! distance
+                  elem_ordrs(1,ne), elem_ordrs(2,ne),  elem_field(ne_length,ne), &
                   elem_field(ne_radius,ne), elem_field(ne_flow,ne), elem_field(ne_mass,ne), &
                   node_field(nj_loss_dif, num_nodes), node_field(nj_loss_imp, num_nodes), &
                   unit_field(nj_loss_sed, num_nodes) ! alveolar dep mass by sed
+
+          select case(ne0)
+            case(166, 177)
+                lobe = 'LUL'
+            case(199, 200)
+                lobe = 'LLL'
+            case(201, 202)
+                lobe = 'RUL'
+            case(203)
+                lobe = 'RLL'
+            case(204)
+                lobe = 'RLL'
+            case default
+                lobe = 'Trachea' !'copious free time'
+          end select
+          write(10,'(1X,''Lobe: '', A10)') lobe !elem_ordrs(1,ne)
         end do
         close(ifile)
     end subroutine write_airway
 
-    !          print *, 'distance: ', sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)) ! distance
-!          print *, 'Generation: ', elem_ordrs(1,ne)
-!          print *, 'Horsfield order: ', elem_ordrs(2,ne)
-!          print *, 'lobe: ???'
-!          print *, 'length: ', elem_field(ne_length,ne)
-!          print *, 'radius: ', elem_field(ne_radius,ne)
-!          print *, 'flow: ', elem_field(ne_flow,ne)
-!          print *, 'Mass in lumen:', elem_field(ne_mass,ne)
-!          print *, 'm_dep by dif: ', node_field(nj_loss_dif, num_nodes) ! alveolar dep mass by dif
-!          print *, 'm_dep by imp: ', node_field(nj_loss_imp, num_nodes)
-!          print *, 'm_dep by sed: ', unit_field(nj_loss_sed, num_nodes) ! alveolar dep mass by sed
-!       !! deposition by each mechanism
-!       ! bronchial dep mass by diffusion
-!       write(10,'('' 4) nj_loss_dif, field, rectangular cartesian, #Components=1'')')
-!       write(10,'(2X,4(1X,F12.6))') sum(node_field(nj_loss_dif,1:num_nodes))
-!
-!       ! bronchial dep mass by sedimentation
-!       write(10,'('' 4) nj_loss_sed, field, rectangular cartesian, #Components=1'')')
-!       write(10,'(2X,4(1X,F12.6))') sum(node_field(nj_loss_sed,1:num_nodes))
-!
-!       ! bronchial dep mass by impaction
-!       write(10,'('' 4) nj_loss_imp, field, rectangular cartesian, #Components=1'')')
-!       write(10,'(2X,4(1X,F12.6))')sum(node_field(nj_loss_imp,1:num_nodes))
-!          print *, 'initial_v: ', unit_field(nu_vol,nolist) ! Initial volume of acinus
-!          print *, 'flow: ', unit_field(nu_vdot0,nolist)   ! flow
-!          print *, 'unit_mass: ', unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist) ! unit_mass
-!!             ! TJ - we might want to change this if for the single acinus?
-!          print *, 'm_dep by dif: ', unit_field(nu_loss_dif, num_units) ! alveolar dep mass by dif
-!          print *, 'm_dep by sed: ', unit_field(nu_loss_sed, num_units) ! alveolar dep mass by sed
 
-! #########################################################################
+
+!!!#########################################################################
 
     subroutine write_terminal(filename, name)
 
         use arrays
         use exports,only: export_node_field
-        use geometry, only: volume_of_mesh
+        use geometry, only: volume_of_mesh,group_elem_parent_term
         use solve,only: pmgmres_ilu_cr
         use species_transport, only: assemble_transport_matrix,reduce_transport_matrix,calc_mass
         use other_consts
@@ -620,14 +614,16 @@ contains
         integer :: ifile=10
         character :: readfile*150
         character :: filename*(*), name*(*)
+        character(LEN=5) :: lobe
         !!! Local Variables
         integer :: len_end,ne,nj,NOLIST,np,np_last,VALUE_INDEX
-        integer :: np0 ! initial node
+        integer :: np0, ne0 !_stem, num_list_total, elem_list_total ! initial node
         logical :: FIRST_NODE
-        !character(len=60) :: name
 
         name = 'terminal'
         np0 = 1
+        !ne_parent = 211!(/211, 214, 215, 223, 224/)
+
         if(index(filename, ".txt")>0)then ! full filename is given
            readfile = trim(filename)
         else! append correct extension
@@ -638,154 +634,36 @@ contains
         do nolist = 1,num_units
           ne = units(nolist)
           np = elem_nodes(2,ne)
-          !***      write the node
-          !print *, 'node: ', np
+          !ne0 = element_top_of_branch(ne)
+          ne0 = element_lobe(ne)
           write(10,'(1X,''Node: '',I12)') np
           do nj=1,3
              !print *,  node_xyz(nj,np)
              write(10,'(2X,4(1X,F12.6))') (node_xyz(nj,np))      !Coordinates
           enddo !njj2
-          write(10,'(f7.3, '' |'',A, 3(f8.3),f10.2,7(f9.2),f10.5,16(f6.1))') &
+          write(10,'(f7.3, '' |'', 3(f8.3),f10.2,7(f9.2),f10.5,16(f6.1))') &
                  sqrt(sum((node_xyz(:, np) - node_xyz(:, np0))**2)), &  ! distance
-                ' lobe: ???', unit_field(nu_vol,nolist), unit_field(nu_vdot0,nolist), &
+                 unit_field(nu_vol,nolist), unit_field(nu_vdot0,nolist), &
                   unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist), &
-                  unit_field(nu_loss_dif, num_units), unit_field(nu_loss_sed, num_units) ! alveolar dep mass by sed
-        end do
+                  unit_field(nu_loss_dif, num_units), unit_field(nu_loss_sed, num_units)
+
+          select case(ne0)
+            case(166, 177)
+                lobe = 'LUL'
+            case(199, 200)
+                lobe = 'LLL'
+            case(201, 202)
+                lobe = 'RUL'
+            case(203)
+                lobe = 'RLL'
+            case default
+                lobe = 'RML' !'copious free time'
+          end select
+
+          write(10,'(1X,''Lobe: '', A10)') lobe !element_lobe(ne)
+        end do!nolist
         close(ifile)
     end subroutine write_terminal
-
-!          print *, 'distance: ', sqrt(sum((node_xyz(:, np) - node_xyz(:, np0))**2)) ! distance
-!          print *, 'lobe: ???'
-!          print *, 'initial_v: ', unit_field(nu_vol,nolist) ! Initial volume of acinus
-!          print *, 'flow: ', unit_field(nu_vdot0,nolist)   ! flow
-!          print *, 'unit_mass: ', unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist) ! unit_mass
-!!             ! TJ - we might want to change this if for the single acinus?
-!          print *, 'm_dep by dif: ', unit_field(nu_loss_dif, num_units) ! alveolar dep mass by dif
-!          print *, 'm_dep by sed: ', unit_field(nu_loss_sed, num_units) ! alveolar dep mass by sed
-
-!    if(write_terminal)then
-!          write(*,'(f7.3,3(f8.3),f10.2,7(f9.2),f10.5,'' |'',16(f6.1))') &
-!               time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
-!               current_volume/1.0e+6_dp,tp%ideal_mass,current_mass,lumen_mass, &
-!               mass_deposit,unit_mass, unit_wall, volume_error, &
-!               mass_error,node_field(nj_conc1,1),(mass_by_gen(i),i=1,16)
-!
-!    end if
-    !print *, 'np0', node_xyz(:,np0)
-    !print *, "hi", num_units !unit_wall/(unit_mass + unit_wall)
-
-
-!   ##################################################################################
-!    subroutine export_terminal_solution(EXNODEFILE, name)
-!
-!    !!! TJ - output for acinus unit
-!    !!! Check list: Y/N
-!    ! unit number - Y
-!    ! xyz coordinates of the unit (this will be the end node location of the terminal element) - Y
-!
-!    ! distance from entrance - Y
-!    ! A label for lobe the acinus is in - N
-!
-!    ! Initial volume of acinus - Y
-!    ! Flow to the acinus - Y
-!    ! Mass in the acinus lumen - Y
-!    ! Initial volume of acinus - Y
-!    ! Deposition in the acinus by each mechanism:
-!    ! TJ - Merryn do we want the alveolar deposition for all acini or just the current single one?
-!    ! alveolar dep mass by diffusion - Y.
-!    ! alveolar dep mass by sedimentation - Y.
-!
-!    !!! Parameters
-!    character(len=MAX_FILENAME_LEN),intent(in) :: EXNODEFILE
-!    character(len=MAX_STRING_LEN),intent(in) :: name
-!
-!    !!! Local Variables
-!    integer :: len_end,ne,nj,NOLIST,np,np_last,VALUE_INDEX
-!    integer :: np0 ! initial node
-!    logical :: FIRST_NODE
-!
-!    len_end=len_trim(name)
-!    if(num_units.GT.0) THEN
-!       open(10, file=EXNODEFILE, status='replace')
-!       !**     write the group name
-!       write(10,'( '' Group name: '',A)') name(:len_end)
-!       VALUE_INDEX = 1
-!       select case (model_type)
-!        case ('particle_transport')
-!          write(10,'( '' #Fields=4'' )')
-!          write(10,'('' 1) coordinates, coordinate, rectangular cartesian, #Components=3'')')
-!          do nj=1,3
-!             if(nj.eq.1) write(10,'(2X,''x.  '')',advance="no")
-!             if(nj.eq.2) write(10,'(2X,''y.  '')',advance="no")
-!             if(nj.eq.3) write(10,'(2X,''z.  '')',advance="no")
-!             write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
-!             VALUE_INDEX=VALUE_INDEX+1
-!          enddo
-!
-!          ! distance from entrance
-!          write(10,'('' 2) Distance from entrance, field, rectangular cartesian, #Components=1'')')
-!          write(10,'(2X,''1.  '')',advance="no")
-!          write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
-!
-!          ! A label for lobe the acinus is in
-!!          write(10,'('' 2) Lobe, field, rectangular cartesian, #Components=1'')')
-!!          write(10,'(2X,''1.  '')',advance="no")
-!!          write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
-!
-!          ! Initial volume of acinus
-!          write(10,'('' 2) initial_volume, field, rectangular cartesian, #Components=1'')')
-!          write(10,'(2X,''1.  '')',advance="no")
-!          write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
-!
-!          !Time averaged flow rate
-!          write(10,'('' 2) average_flow, field, rectangular cartesian, #Components=1'')')
-!          write(10,'(2X,''1.  '')',advance="no")
-!          write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
-!          VALUE_INDEX=VALUE_INDEX+1
-!
-!          !unit mass
-!          write(10,'('' 3) unit_mass, field, rectangular cartesian, #Components=1'')')
-!          write(10,'(2X,''1.  '')',advance="no")
-!          write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
-!          VALUE_INDEX=VALUE_INDEX+1
-!
-!          ! alveolar dep mass by diffusion
-!          write(10,'('' 4) nu_loss_dif, field, rectangular cartesian, #Components=1'')')
-!          write(10,'(2X,''1.  '')',advance="no")
-!          write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
-!
-!          ! alveolar dep mass by sedimentation
-!          write(10,'('' 4) nu_loss_sed, field, rectangular cartesian, #Components=1'')')
-!          write(10,'(2X,''1.  '')',advance="no")
-!          write(10,'(''Value index='',I1,'', #Derivatives='',I1)',advance="yes") VALUE_INDEX,0
-!
-!       end select
-!
-!    !*** Exporting Terminal Solution
-!       do nolist = 1,num_units
-!          ne = units(nolist)
-!          np = elem_nodes(2,ne)
-!          !***      write the node
-!          write(10,'(1X,''Node: '',I12)') np
-!          do nj=1,3
-!             write(10,'(2X,4(1X,F12.6))') (node_xyz(nj,np))      !Coordinates
-!          enddo !njj2
-!          select case (model_type)
-!            case ('particle_transport')
-!             write(10,'(2X,4(1X,F12.6))') sqrt(sum(node_xyz(nj, np) - node_xyz(nj, np0))**2) ! distance from entrance
-!             !write(10,'(2X,4(1X,F12.6))')   ! space left for Lobe
-!             write(10,'(2X,4(1X,F12.6))') unit_field(nu_vol,nolist) ! Initial volume of acinus
-!             write(10,'(2X,4(1X,F12.6))') (unit_field(nu_vdot0,nolist))   ! flow
-!             write(10,'(2X,4(1X,F12.6))') (unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist)) ! unit_mass
-!             ! TJ - we might want to change this if for the single acinus?
-!             write(10,'(2X,4(1X,F12.6))') sum(unit_field(nu_loss_dif,1:num_units)) ! alveolar dep mass by dif
-!             write(10,'(2X,4(1X,F12.6))') sum(unit_field(nu_loss_sed,1:num_units)) ! alveolar dep mass by sed
-!          end select
-!       enddo
-!    endif
-!end subroutine export_terminal_solution
-
-
 
 !!!###################################################################################
 
@@ -2392,6 +2270,47 @@ contains
     enddo
 
   end function where_inlist
+
+! #################################################################
+
+  function element_lobe(ne)
+      !!! change to find which lobe belongs to
+    integer :: ne
+    ! local variables
+    integer :: generation,ne0
+    logical :: continue
+    integer :: element_lobe
+
+    element_lobe = ne
+    generation = elem_ordrs(1,ne)
+    ne0 = elem_cnct(-1,1,ne)
+    continue = .true.
+    !if(ne0.le.200)
+    if(elem_ordrs(1,ne0).le.3) continue = .false.
+
+    do while(continue)
+       element_lobe = ne0
+       ne0 = elem_cnct(-1,1,ne0)
+       if(elem_ordrs(1,ne0).le.3)    continue = .false.
+    enddo
+  end function element_lobe
+
+!    select case(hour)
+!        case( 1:8 )
+!            activity = 'sleep'
+!        case( 9:11, 13, 14 )
+!            activity = 'class'
+!        case( 12, 17 )
+!            activity = 'meal'
+!        case default
+!            activity = 'copious free time'
+!    end select
+       !if(ne0.le.200)
+       !generation = elem_ordrs(1,ne0)
+       !write(*,*) 'koone: ', ne0!print *,'ne0', ne0
+       ! if(ne0.le.200.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+       !if(ne0.le.200.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+
 
 
   ! #################################################################

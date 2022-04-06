@@ -3810,7 +3810,7 @@ contains
           parentlist(num_parents)=ne
        endif !elem_cnct
     enddo !noelem
-    
+
     deallocate(templist)
     
     call enter_exit(sub_name,2)
