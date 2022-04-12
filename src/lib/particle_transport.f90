@@ -554,24 +554,11 @@ contains
         open(ifile, file=readfile, status='replace')
 
         do ne = 1,num_elems
-          !print *, 'ne', ne != units(nolist)
-          write(10,'(1X,''Element: '',I12,'' 0 0'' )') ne
           np1 = elem_nodes(1,ne)
           np2 = elem_nodes(2,ne)
-          write(10,'(2X,''Element: '', 4(1X,F12.6))') (node_xyz(:, np1) + node_xyz(:, np2))/2
+
           midpoint(:) = (node_xyz(:, np1) + node_xyz(:, np2))/2
-
           ne0 = element_lobe(ne)
-
-!          write(10,'(1X,''Distance to entrance: '', f7.3)') sqrt(sum((midpoint(:) - node_xyz(:, np0))**2))
-!          write(10,'(1X,''Generation: '', I2)') elem_ordrs(1,ne)
-!          write(10,'(1X,''Horsfield order: '', I2)') elem_ordrs(2,ne)
-          write(10,'(f7.3, '' |'',  I2, I2, '' |'',  f7.3, f7.2, f7.2, f7.2, f7.2, f10.2, f10.2)') &
-                  sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)), & ! distance
-                  elem_ordrs(1,ne), elem_ordrs(2,ne),  elem_field(ne_length,ne), &
-                  elem_field(ne_radius,ne), elem_field(ne_flow,ne), elem_field(ne_mass,ne), &
-                  node_field(nj_loss_dif, num_nodes), node_field(nj_loss_imp, num_nodes), &
-                  unit_field(nj_loss_sed, num_nodes) ! alveolar dep mass by sed
 
           select case(ne0)
             case(166, 177)
@@ -587,7 +574,14 @@ contains
             case default
                 lobe = 'Trachea' !'copious free time'
           end select
-          write(10,'(1X,''Lobe: '', A10)') lobe !elem_ordrs(1,ne)
+
+          write(10,'(I12, 3(F10.2), f10.3,  2(I3), '' | '' A5, 7(f7.2))') &
+                  ne, (node_xyz(:, np1) + node_xyz(:, np2))/2, &
+                  sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)), & ! distance
+                  elem_ordrs(1,ne), elem_ordrs(2,ne), lobe, elem_field(ne_length,ne), &
+                  elem_field(ne_radius,ne), elem_field(ne_flow,ne), elem_field(ne_mass,ne), &
+                  node_field(nj_loss_dif, num_nodes), node_field(nj_loss_imp, num_nodes), &
+                  unit_field(nj_loss_sed, num_nodes) ! alveolar dep mass by sed
         end do
         close(ifile)
     end subroutine write_airway
@@ -634,18 +628,8 @@ contains
         do nolist = 1,num_units
           ne = units(nolist)
           np = elem_nodes(2,ne)
-          !ne0 = element_top_of_branch(ne)
+
           ne0 = element_lobe(ne)
-          write(10,'(1X,''Node: '',I12)') np
-          do nj=1,3
-             !print *,  node_xyz(nj,np)
-             write(10,'(2X,4(1X,F12.6))') (node_xyz(nj,np))      !Coordinates
-          enddo !njj2
-          write(10,'(f7.3, '' |'', 3(f8.3),f10.2,7(f9.2),f10.5,16(f6.1))') &
-                 sqrt(sum((node_xyz(:, np) - node_xyz(:, np0))**2)), &  ! distance
-                 unit_field(nu_vol,nolist), unit_field(nu_vdot0,nolist), &
-                  unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist), &
-                  unit_field(nu_loss_dif, num_units), unit_field(nu_loss_sed, num_units)
 
           select case(ne0)
             case(166, 177)
@@ -660,7 +644,13 @@ contains
                 lobe = 'RML' !'copious free time'
           end select
 
-          write(10,'(1X,''Lobe: '', A10)') lobe !element_lobe(ne)
+          write(10,'(I10, 3(f10.2), f10.2, A7, f8.3, f10.2, 3(f9.2))') &
+                  np, (node_xyz(:,np)), sqrt(sum((node_xyz(:, np) - node_xyz(:, np0))**2)), &  ! distance
+                  lobe, unit_field(nu_vol,nolist), unit_field(nu_vdot0,nolist), &
+                  unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist), &
+                  unit_field(nu_loss_dif, num_units), unit_field(nu_loss_sed, num_units)
+
+          !write(10,'(1X,''Lobe: '', A10)') lobe !element_lobe(ne)
         end do!nolist
         close(ifile)
     end subroutine write_terminal
