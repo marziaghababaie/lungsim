@@ -135,9 +135,9 @@ contains
       part_param%gravityz = 9.81_dp*1.0e3_dp ! *MHT change*
     endif
     
-    part_param%time_inspiration = 0.2!2.0_dp
+    part_param%time_inspiration = 2.0_dp
     part_param%time_breath_hold = 1.0_dp
-    part_param%time_expiration = 0.2!2.0_dp
+    part_param%time_expiration = 2.0_dp
     part_param%tidal_volume = volume_target! tidal volume target, mm^3
     part_param%FRC = FRC
     part_param%initial_volume =FRC*1.0e+6_dp !initial volume of air inlungs
@@ -575,7 +575,7 @@ contains
                 lobe = 'Trachea' !'copious free time'
           end select
 
-          write(10,'(I12, 3(F10.2), f10.3,  2(I3), '' | '' A5, 7(f7.2))') &
+          write(10,'(I6, 4(F10.2),  2(I5), 2x, A5, 2(F7.3), 5(D11.3))') &
                   ne, (node_xyz(:, np1) + node_xyz(:, np2))/2, &
                   sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)), & ! distance
                   elem_ordrs(1,ne), elem_ordrs(2,ne), lobe, elem_field(ne_length,ne), &
@@ -644,7 +644,7 @@ contains
                 lobe = 'RML' !'copious free time'
           end select
 
-          write(10,'(I10, 3(f10.2), f10.2, A7, f8.3, f10.2, 3(f9.2))') &
+          write(10,'(I6, 3(f10.2), f10.2, A7, f8.3, f10.2, 3(D11.3))') &
                   np, (node_xyz(:,np)), sqrt(sum((node_xyz(:, np) - node_xyz(:, np0))**2)), &  ! distance
                   lobe, unit_field(nu_vol,nolist), unit_field(nu_vdot0,nolist), &
                   unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist), &
