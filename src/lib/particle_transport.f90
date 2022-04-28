@@ -570,7 +570,7 @@ contains
             case(203)
                 lobe = 'RLL'
             case(204)
-                lobe = 'RLL'
+                lobe = 'RML'
             case default
                 lobe = 'Trachea' !'copious free time'
           end select
@@ -580,8 +580,8 @@ contains
                   sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)), & ! distance
                   elem_ordrs(1,ne), elem_ordrs(2,ne), lobe, elem_field(ne_length,ne), &
                   elem_field(ne_radius,ne), elem_field(ne_flow,ne), elem_field(ne_mass,ne), &
-                  node_field(nj_loss_dif, num_nodes), node_field(nj_loss_imp, num_nodes), &
-                  unit_field(nj_loss_sed, num_nodes) ! alveolar dep mass by sed
+                  node_field(nj_loss_dif, ne), node_field(nj_loss_imp, ne), &
+                  node_field(nj_loss_sed, ne) ! alveolar dep mass by sed
         end do
         close(ifile)
     end subroutine write_airway
@@ -648,7 +648,7 @@ contains
                   np, (node_xyz(:,np)), sqrt(sum((node_xyz(:, np) - node_xyz(:, np0))**2)), &  ! distance
                   lobe, unit_field(nu_vol,nolist), unit_field(nu_vdot0,nolist), &
                   unit_field(nu_vol,nolist)*unit_field(nu_conc1,nolist), &
-                  unit_field(nu_loss_dif, num_units), unit_field(nu_loss_sed, num_units)
+                  unit_field(nu_loss_dif, nolist), unit_field(nu_loss_sed, nolist)
 
           !write(10,'(1X,''Lobe: '', A10)') lobe !element_lobe(ne)
         end do!nolist
