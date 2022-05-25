@@ -20,7 +20,7 @@ module particle_transport
   
   public where_inlist, inlist
   public calc_mass_particles
-    public write_terminal, write_airway
+  public write_terminal, write_airway
 
 contains
 
@@ -134,13 +134,18 @@ contains
       part_param%gravityy = 0.0_dp
       part_param%gravityz = 9.81_dp*1.0e3_dp ! *MHT change*
     endif
-    
+
+    ! zero gravity
+    part_param%gravityx = 0.0_dp
+    part_param%gravityy = 0.0_dp
+    part_param%gravityz = 0.0_dp! *MHT change*
+
     part_param%time_inspiration = 2.0_dp
     part_param%time_breath_hold = 1.0_dp
     part_param%time_expiration = 2.0_dp
     part_param%tidal_volume = volume_target! tidal volume target, mm^3
     part_param%FRC = FRC
-    part_param%initial_volume =FRC*1.0e+6_dp !initial volume of air inlungs
+    part_param%initial_volume =FRC*1.0e+6_dp !initial volume of air in lungs
 
     call set_elem_volume() 
     call volume_of_mesh(part_param%initial_volume,volume_tree) ! to get deadspace volume
@@ -575,13 +580,14 @@ contains
                 lobe = 'Trachea' !'copious free time'
           end select
 
-          write(10,'(I6, 4(F10.2),  2(I5), 2x, A5, 2(F7.3), 5(D11.3))') &
+          write(10,'(I6, 4(F10.2),  2(I5), 2x, A5, 2(F7.3), 6(D11.3))') &
                   ne, (node_xyz(:, np1) + node_xyz(:, np2))/2, &
                   sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)), & ! distance
                   elem_ordrs(1,ne), elem_ordrs(2,ne), lobe, elem_field(ne_length,ne), &
                   elem_field(ne_radius,ne), elem_field(ne_flow,ne), elem_field(ne_mass,ne), &
                   node_field(nj_loss_dif, ne), node_field(nj_loss_imp, ne), &
-                  node_field(nj_loss_sed, ne) ! alveolar dep mass by sed
+                  node_field(nj_loss_sed, ne), & ! alveolar dep mass by sed
+                  node_field(nj_conc1, ne) ! concentration
         end do
         close(ifile)
     end subroutine write_airway
@@ -643,6 +649,8 @@ contains
             case default
                 lobe = 'RML' !'copious free time'
           end select
+
+          ! TJ - find the concentration array!
 
           write(10,'(I6, 3(f10.2), f10.2, A7, f8.3, f10.2, 3(D11.3))') &
                   np, (node_xyz(:,np)), sqrt(sum((node_xyz(:, np) - node_xyz(:, np0))**2)), &  ! distance
