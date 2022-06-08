@@ -18,9 +18,9 @@ set(LIB_SRCS
   precision.f90
   pressure_resistance_flow.f90
   species_transport.f90
-  particle_transport.f90
   solve.f90
   ventilation.f90
+  particle_transport.f90
   wave_transmission.f90
 )
 if (SUPERLU_FOUND)

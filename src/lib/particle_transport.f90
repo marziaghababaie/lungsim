@@ -22,6 +22,9 @@ module particle_transport
   public calc_mass_particles
   public write_terminal, write_airway
 
+  public branch_length
+
+
 contains
 
   subroutine solve_particles_decoupled(initial_concentration, inlet_concentration, particle_size)
@@ -120,11 +123,12 @@ contains
     call read_params_evaluate_flow(Gdirn, chest_wall_compliance, &
        constrict, COV, FRC, i_to_e_ratio, pmus_step, press_in,&
        refvol, RMaxMean, RMinMean, T_interval, volume_target, expiration_type)
-       
+    ! z = 0
     if(GDirn.eq.1) then 
       part_param%gravityx = 9.81_dp*1.0e3_dp
       part_param%gravityy = 0.0_dp
       part_param%gravityz = 0.0_dp
+        !z(1) = 0.0_dp
     else if(GDirn.eq.2) then
       part_param%gravityx = 0.0_dp
       part_param%gravityy = 9.81_dp*1.0e3_dp
@@ -135,10 +139,10 @@ contains
       part_param%gravityz = 9.81_dp*1.0e3_dp ! *MHT change*
     endif
 
-    ! zero gravity
-    part_param%gravityx = 0.0_dp
-    part_param%gravityy = 0.0_dp
-    part_param%gravityz = 0.0_dp! *MHT change*
+    ! TJ - uncomment for zero gravity
+!    part_param%gravityx = 0.0_dp
+!    part_param%gravityy = 0.0_dp
+!    part_param%gravityz = 0.0_dp ! *MHT change*
 
     part_param%time_inspiration = 2.0_dp
     part_param%time_breath_hold = 1.0_dp
@@ -520,7 +524,15 @@ contains
     call enter_exit(sub_name,2)
   end subroutine solve_particles
   
-    
+
+
+
+
+  ! --------------------------- move ventilation here ------------------------------------------
+
+
+
+
 
 !!!###################################################################################
     subroutine write_airway(ne_field, filename, groupname, field_name)
@@ -1355,9 +1367,10 @@ contains
 !       vector2(3) = node_xyz(3,np)+1.0_dp  ! *MHT original*
        vector2(3) = -1.0_dp                   ! *MHT change*
        alpha = angle_btwn_vectors(vector1,vector2)
-
+       !write(*,*) ne, alpha
 !!! settlement velocity w.r.t. flow direction; set equal to zero to deactivate gravity effect        
-       vseff = cos(alpha)*pi*elem_field(ne_radius,ne)**2.0_dp * vs
+       vseff = 0 ! TJ - 0G
+       !vseff = cos(alpha)*pi*elem_field(ne_radius,ne)**2.0_dp * vs
 
 !!! note following:
 !!! ne_part_vel was stored as nej_flow in cmiss
@@ -1379,7 +1392,7 @@ contains
 !       XP(2,nv2,nej_flow,np2) = (XP(nk,nv,nej_flow,np)/XP(1,nv2,nj_radius,np)**2 &
 !            -XP(nk,nv2,nej_flow,np2)/XP(1,nv2,nj_radius,np2)**2)/elem_field(ne_length,ne)/PI    
     enddo
-
+    !stop
     call enter_exit(sub_name,2)
     
   end subroutine particle_velocity
@@ -1474,6 +1487,7 @@ contains
           !alpha = abs(angle_btwn_points(B,A,Z)) ! calculate angle between tube axis and gravity vector! *MHT original*
           z = 0.0_dp ! *MHT change*
           z(3) = -1.0_dp  ! *MHT change*
+          !z(3) = 1.0_dp
           alpha = abs(angle_btwn_vectors(B-A,Z)) ! calculate angle between tube axis and gravity vector! *MHT change*
 
 !! sedimentation
@@ -1481,6 +1495,8 @@ contains
           Vdep(1) = Vdep(1) + abs(sin(alpha))*part_param%prho* 9.81e3_dp * &
                               part_param%pdia**2.0_dp*&
                          length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
+         ! Vdep(1) = 0 !TJ - test for 0G
+
           ! *MHT change*
 !          mean_conc = 0.5_dp * (node_field(nj_conc1,np) + node_field(nj_conc1,np2))
 !!          Vdep(1) = Vdep(1) + abs(sin(alpha)) * mean_conc * 9.81e3_dp * part_param%pdia**2.0_dp * &
@@ -1629,15 +1645,19 @@ contains
 !!!!............ sedimentation in alveolar tissue
 
                 ! TJ - add EQN (56)
-                Vdep(7) = Vdep(7)+ pi * part_param%prho *9.81e3_dp &
+                Vdep(7) = Vdep(7)+ pi * part_param%prho * 9.81e3_dp &
                         *part_param%pdia**2.0_dp *dt *Dalv**2 &
                         /72.0_dp/part_param%mu
+!                Vdep(7) = 0 ! TJ - test for 0G
 
-                ! deposition fraction due to sedimentation (0.853d0 is area correction ChoiKim2007) 
+                ! deposition fraction due to sedimentation (0.853d0 is area correction ChoiKim2007)
+                !DepFrac(5) = 0 ! TJ - test for 0G
                 DepFrac(5) = part_param%prho &
                              *9.81e3_dp & !part_param%gravityy &
                              *part_param%pdia**2.0_dp &
                              *dt/12.0_dp/part_param%mu/Dalv!*0.853_dp
+
+
 !                DepFrac(5) = part_acinus_field(1+gen,nunit) &
 !                             *9.81e3_dp & !part_param%gravityy &
 !                             *part_param%pdia**2.0_dp &
@@ -1665,12 +1685,13 @@ contains
                    !! Sedimentation in ducts
                    ! deposition volume due to sedimentation (statistic orientation to gravity)
                    ! TJ - change back
+
                    Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
                         *part_param%prho &
                         *9.81e3_dp & !*part_param%gravityy &
                         *part_param%pdia**2.0_dp &
                         *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun
-
+                    !Vdep(5) = 0
 !                   Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
 !                        *part_acinus_field(1+gen,nunit) &
 !                        *9.81e3_dp & !*part_param%gravityy &
