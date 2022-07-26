@@ -9,7 +9,7 @@ module mesh_utilities
 
   use arrays
   use other_consts
-
+  use indices
   implicit none
 
   private
@@ -22,7 +22,7 @@ module mesh_utilities
        mesh_a_x_eq_b,ph3,pl1,point_internal_to_surface,scalar_product_3, &
        scalar_triple_product,scale_mesh,stem_element,terminal_element, &
        unit_norm_to_plane_two_vectors,unit_norm_to_three_points,unit_vector, &
-       vector_length,volume_internal_to_surface,which_child
+       vector_length,volume_internal_to_surface,which_child,cumulative_branch_length
 
 contains
 
@@ -895,6 +895,46 @@ contains
     endif
     
   end function which_child
+
+
+  function cumulative_branch_length(ne)
+!!!! dummy arguments
+    integer :: ne
+    ! local variables
+    integer :: generation,ne0
+    real(dp) :: length
+    logical :: continue
+    real(dp) cumulative_branch_length
+
+    generation = elem_ordrs(1,ne)
+    length = elem_field(ne_length,ne)
+    ne0 = elem_cnct(-1,1,ne)
+    continue = .true.
+    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+
+    do while(continue)
+       length = length + elem_field(ne_length,ne0)
+       ne0 = elem_cnct(-1,1,ne0)
+       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    enddo
+
+    ne0 = elem_cnct(1,1,ne)
+    continue = .true.
+    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+
+    do while(continue)
+       length = length + elem_field(ne_length,ne0)
+       ne0 = elem_cnct(1,1,ne0)
+       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    enddo
+
+    cumulative_branch_length = length
+
+  end function cumulative_branch_length
+
+
+
+
 
 !!!#############################################################################
   

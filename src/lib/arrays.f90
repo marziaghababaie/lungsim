@@ -121,6 +121,7 @@ module arrays
     character(len=20) :: protocol
     character(len=100) :: group_name
     real(dp) :: diffu,LacTLC(10),RacTLC(10),VacTLC(9)
+    integer :: grav_factor
   end type particle_parameters
 
   type admittance_param

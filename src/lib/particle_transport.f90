@@ -22,7 +22,7 @@ module particle_transport
   public calc_mass_particles
   public write_terminal, write_airway
 
-  public branch_length
+  !public branch_length
 
 
 contains
@@ -128,21 +128,29 @@ contains
       part_param%gravityx = 9.81_dp*1.0e3_dp
       part_param%gravityy = 0.0_dp
       part_param%gravityz = 0.0_dp
-        !z(1) = 0.0_dp
+      part_param%grav_factor = 1
     else if(GDirn.eq.2) then
       part_param%gravityx = 0.0_dp
       part_param%gravityy = 9.81_dp*1.0e3_dp
       part_param%gravityz = 0.0_dp
+      part_param%grav_factor = 1
     else if (GDirn.eq.3) then !Needs checking, may not always be consistent with mesh
       part_param%gravityx = 0.0_dp
       part_param%gravityy = 0.0_dp
       part_param%gravityz = 9.81_dp*1.0e3_dp ! *MHT change*
+      part_param%grav_factor = 1
+    else if (GDirn.eq.0) then
+        part_param%gravityx = 0.0_dp
+        part_param%gravityy = 0.0_dp
+        part_param%gravityz = 0.0_dp ! *MHT change*
+        part_param%grav_factor = 0
+    else
+     print *, "ERROR: Posture not recognised (currently only x=1,y=2,z=3))"
+     call exit(0)
     endif
 
     ! TJ - uncomment for zero gravity
-!    part_param%gravityx = 0.0_dp
-!    part_param%gravityy = 0.0_dp
-!    part_param%gravityz = 0.0_dp ! *MHT change*
+    print *, 'Gravity Factor', part_param%grav_factor
 
     part_param%time_inspiration = 2.0_dp
     part_param%time_breath_hold = 1.0_dp
@@ -1369,8 +1377,8 @@ contains
        alpha = angle_btwn_vectors(vector1,vector2)
        !write(*,*) ne, alpha
 !!! settlement velocity w.r.t. flow direction; set equal to zero to deactivate gravity effect        
-       vseff = 0 ! TJ - 0G
-       !vseff = cos(alpha)*pi*elem_field(ne_radius,ne)**2.0_dp * vs
+       !vseff = 0 ! TJ - 0G
+       vseff = cos(alpha)*pi*elem_field(ne_radius,ne)**2.0_dp * vs * part_param%grav_factor
 
 !!! note following:
 !!! ne_part_vel was stored as nej_flow in cmiss
@@ -1394,7 +1402,7 @@ contains
     enddo
     !stop
     call enter_exit(sub_name,2)
-    
+    !print *, 'vseff', vseff
   end subroutine particle_velocity
 
 !!!#######################################################################################
@@ -1413,7 +1421,7 @@ contains
     use arrays
     use indices
     use other_consts
-    use mesh_utilities,only: angle_btwn_points,angle_btwn_vectors
+    use mesh_utilities,only: angle_btwn_points,angle_btwn_vectors,cumulative_branch_length
     use diagnostics, only: enter_exit
     
     implicit none
@@ -1468,7 +1476,7 @@ contains
              B(:) = node_xyz(:,np)  ! *MHT change*
           endif
     ! *MHT change* for following: not clear if should be branch length of segment length? currently original      
-          lduct = branch_length(ne) ! this is the length of the whole (unrefined) branch, i.e. between bifurcations
+          lduct = cumulative_branch_length(ne) ! this is the length of the whole (unrefined) branch, i.e. between bifurcations
           !element (tube) length - since loop is over every node adjacent element, half length is used
           length = elem_field(ne_length,ne)/2.0_dp
           !lduct = length ! *MHT change*- actually keeps the same as original
@@ -1487,14 +1495,15 @@ contains
           !alpha = abs(angle_btwn_points(B,A,Z)) ! calculate angle between tube axis and gravity vector! *MHT original*
           z = 0.0_dp ! *MHT change*
           z(3) = -1.0_dp  ! *MHT change*
-          !z(3) = 1.0_dp
+          !z(3) = 1.0_dp ! 1G inverted
           alpha = abs(angle_btwn_vectors(B-A,Z)) ! calculate angle between tube axis and gravity vector! *MHT change*
 
 !! sedimentation
           ! *MHT  -original ! TJ change back, should be prho (the density of the sphere)
-          Vdep(1) = Vdep(1) + abs(sin(alpha))*part_param%prho* 9.81e3_dp * &
-                              part_param%pdia**2.0_dp*&
-                         length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
+          Vdep(1) = (Vdep(1) + abs(sin(alpha))*part_param%prho* 9.81e3_dp * &
+                    part_param%pdia**2.0_dp* &
+                         length*radius(0)*dt/9.0_dp/part_param%mu)*part_param%grav_factor
+          ! deposition volume due to sedimentation
          ! Vdep(1) = 0 !TJ - test for 0G
 
           ! *MHT change*
@@ -1645,9 +1654,9 @@ contains
 !!!!............ sedimentation in alveolar tissue
 
                 ! TJ - add EQN (56)
-                Vdep(7) = Vdep(7)+ pi * part_param%prho * 9.81e3_dp &
+                Vdep(7) = (Vdep(7)+ pi * part_param%prho * 9.81e3_dp &
                         *part_param%pdia**2.0_dp *dt *Dalv**2 &
-                        /72.0_dp/part_param%mu
+                        /72.0_dp/part_param%mu)* part_param%grav_factor
 !                Vdep(7) = 0 ! TJ - test for 0G
 
                 ! deposition fraction due to sedimentation (0.853d0 is area correction ChoiKim2007)
@@ -1655,7 +1664,7 @@ contains
                 DepFrac(5) = part_param%prho &
                              *9.81e3_dp & !part_param%gravityy &
                              *part_param%pdia**2.0_dp &
-                             *dt/12.0_dp/part_param%mu/Dalv!*0.853_dp
+                             *dt/12.0_dp/part_param%mu/Dalv* part_param%grav_factor
 
 
 !                DepFrac(5) = part_acinus_field(1+gen,nunit) &
@@ -1687,7 +1696,7 @@ contains
                    ! TJ - change back
 
                    Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
-                        *part_param%prho &
+                        *part_param%prho * part_param%grav_factor &
                         *9.81e3_dp & !*part_param%gravityy &
                         *part_param%pdia**2.0_dp &
                         *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun
@@ -2224,40 +2233,40 @@ contains
   
 !#########################################################################
 
-  function branch_length(ne)
-!!! dummy arguments
-    integer :: ne
-    ! local variables
-    integer :: generation,ne0
-    real(dp) :: length
-    logical :: continue
-    real(dp) branch_length
-
-    generation = elem_ordrs(1,ne)
-    length = elem_field(ne_length,ne)
-    ne0 = elem_cnct(-1,1,ne)
-    continue = .true.
-    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-    
-    do while(continue)
-       length = length + elem_field(ne_length,ne0)
-       ne0 = elem_cnct(-1,1,ne0)
-       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-    enddo
-
-    ne0 = elem_cnct(1,1,ne)
-    continue = .true.
-    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-
-    do while(continue)
-       length = length + elem_field(ne_length,ne0)
-       ne0 = elem_cnct(1,1,ne0)
-       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-    enddo
-
-    branch_length = length
-
-  end function branch_length
+!  function branch_length(ne)
+!!!! dummy arguments
+!    integer :: ne
+!    ! local variables
+!    integer :: generation,ne0
+!    real(dp) :: length
+!    logical :: continue
+!    real(dp) branch_length
+!
+!    generation = elem_ordrs(1,ne)
+!    length = elem_field(ne_length,ne)
+!    ne0 = elem_cnct(-1,1,ne)
+!    continue = .true.
+!    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+!
+!    do while(continue)
+!       length = length + elem_field(ne_length,ne0)
+!       ne0 = elem_cnct(-1,1,ne0)
+!       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+!    enddo
+!
+!    ne0 = elem_cnct(1,1,ne)
+!    continue = .true.
+!    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+!
+!    do while(continue)
+!       length = length + elem_field(ne_length,ne0)
+!       ne0 = elem_cnct(1,1,ne0)
+!       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+!    enddo
+!
+!    branch_length = length
+!
+!  end function branch_length
 
 !#########################################################################
 

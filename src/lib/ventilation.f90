@@ -671,7 +671,7 @@ contains
 !!!#############################################################################
 
   subroutine update_resistance
-      use particle_transport, only: branch_length
+    use mesh_utilities , only: cumulative_branch_length
     ! Local variables
     integer :: i,ne,ne2,np1,np2,nunit
     real(dp) :: ett_resistance,gamma,le,rad,resistance,reynolds,sum,zeta
@@ -710,7 +710,7 @@ contains
        reynolds = abs(elem_field(ne_Vdot,ne)*2.0_dp*GAS_DENSITY/ &
             (pi*elem_field(ne_radius,ne)*GAS_VISCOSITY))
        zeta = MAX(1.0_dp,dsqrt(2.0_dp*elem_field(ne_radius,ne)* &
-            reynolds/branch_length(ne))*gamma)
+            reynolds/cumulative_branch_length(ne))*gamma)
        elem_field(ne_resist,ne) = resistance * zeta
        elem_field(ne_t_resist,ne) = elem_field(ne_resist,ne) + &
             elem_field(ne_t_resist,ne)
