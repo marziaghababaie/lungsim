@@ -2479,8 +2479,10 @@ contains
                 if(index(ctemp1, "value")> 0) then
                    radius = get_final_real(ctemp1)
                    elem_field(ne_radius,ne) = radius
-                   elem_field(ne_radius_in,ne) = radius
-                   elem_field(ne_radius_out,ne) = radius
+                   if(radius_type.eq.'taper')then
+                      elem_field(ne_radius_in,ne) = radius
+                      elem_field(ne_radius_out,ne) = radius
+                   endif
                 endif
                 ne_counter = ne_counter + 1
              endif
