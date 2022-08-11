@@ -2507,7 +2507,7 @@ contains
        ! element volume
        elem_field(ne_vol,ne) = PI * elem_field(ne_radius,ne)**2 * &
             elem_field(ne_length,ne)
-       elem_field(ne_a_A,ne) = 1.0_dp ! set default for ratio a/A
+       if(ne_a_A.ne.0) elem_field(ne_a_A,ne) = 1.0_dp ! set default for ratio a/A
     enddo
 
     call enter_exit(sub_name,2)
