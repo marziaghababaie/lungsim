@@ -3133,7 +3133,7 @@ contains
           elem_field(ne_vol,ne_new) = elem_field(ne_vol,ne)
           elem_field(ne_vd_bel,ne_new) = elem_field(ne_vd_bel,ne) - elem_field(ne_vol,ne)*n_refine
           elem_field(ne_vol_bel,ne_new) = elem_field(ne_vol_bel,ne) - elem_field(ne_vol,ne)*n_refine
-          elem_field(ne_a_A,ne_new) = elem_field(ne_a_A,ne)
+          if(ne_a_A.ne.0) elem_field(ne_a_A,ne_new) = elem_field(ne_a_A,ne)
           elem_direction(1:3,ne_new) = elem_direction(1:3,ne)
           elem_ordrs(1,ne_new) = elem_ordrs(1,ne)
           if(num_units.gt.0) temp_elem_units_below(ne_new) = elem_units_below(ne)

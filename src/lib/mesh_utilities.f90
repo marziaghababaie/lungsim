@@ -910,22 +910,38 @@ contains
     length = elem_field(ne_length,ne)
     ne0 = elem_cnct(-1,1,ne)
     continue = .true.
-    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    if(ne0.eq.0)then
+       continue = .false.
+    else if(elem_ordrs(1,ne0).ne.generation)then
+       continue = .false.
+    endif
 
     do while(continue)
        length = length + elem_field(ne_length,ne0)
        ne0 = elem_cnct(-1,1,ne0)
-       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+       if(ne0.eq.0)then
+          continue = .false.
+       else if(elem_ordrs(1,ne0).ne.generation)then
+          continue = .false.
+       endif
     enddo
 
     ne0 = elem_cnct(1,1,ne)
     continue = .true.
-    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+    if(ne0.eq.0)then
+       continue = .false.
+    else if(elem_ordrs(1,ne0).ne.generation)then
+       continue = .false.
+    endif
 
     do while(continue)
        length = length + elem_field(ne_length,ne0)
        ne0 = elem_cnct(1,1,ne0)
-       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+       if(ne0.eq.0)then
+          continue = .false.
+       else if(elem_ordrs(1,ne0).ne.generation)then
+          continue = .false.
+       endif
     enddo
 
     cumulative_branch_length = length
