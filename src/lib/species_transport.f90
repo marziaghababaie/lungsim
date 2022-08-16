@@ -14,7 +14,7 @@ module species_transport
   use gas_exchange
   use indices
   use other_consts
-  
+
   implicit none
 
   !Module parameters
@@ -24,7 +24,7 @@ module species_transport
   !Module variables
 
   !Interfaces
-  private 
+  private
   public initialise_transport
   public initialise_exchange
   public assemble_transport_matrix
@@ -77,7 +77,7 @@ contains
 !       0.8_dp*(260.0_dp*1.0e+3_dp/60.0_dp),260.0_dp*1.0e+3_dp/60.0_dp )
 !    case('particle_transport')
 !       call controller_particlesolve('.')
-!       
+!
 !     case DEFAULT
 !        print*, 'The problem does not exist, exiting'
 !        stop
@@ -95,13 +95,13 @@ contains
    use indices
    use arrays, only: dp,gasex_field,num_units,node_field,transport_parameters
    use diagnostics, only: enter_exit
-   
+
    real(dp), intent(in) :: initial_concentration,inlet_concentration
    type(transport_parameters) :: tp
    character(len=60) :: sub_name
    sub_name = 'initialise_transport'
    call enter_exit(sub_name,1)
-   
+
    write(*,*) 'Allocating memory and initialising arrays for species transport problems'
    select case (model_type)
      case ('gas_mix')
@@ -116,11 +116,11 @@ contains
         print*, 'The problem does not exist, exiting'
         stop
     end select
-   
+
    call enter_exit(sub_name,2)
  end subroutine initialise_transport
- 
- 
+
+
  !
 !###########################################################################################
 !
@@ -133,7 +133,7 @@ contains
    character(len=60) :: sub_name
    sub_name = 'initialise_exchange'
    call enter_exit(sub_name,1)
-   
+
    write(*,*) 'Allocating memory and initialising arrays for species transport problems'
    select case (model_type)
      case ('gas_exchange')
@@ -150,10 +150,10 @@ contains
         print*, 'The problem does not exist, exiting'
         stop
     end select
-   
+
    call enter_exit(sub_name,2)
  end subroutine initialise_exchange
- 
+
  !!!#########################################################################
 
   subroutine assemble_transport_matrix(diffusion_coeff)
@@ -209,7 +209,7 @@ contains
     call enter_exit(sub_name,2)
 
   end subroutine assemble_transport_matrix
-  
+
 !!!########################################################################
 
   subroutine intial_transport(initial_concentration,inlet_concentration,tp)
@@ -222,7 +222,7 @@ contains
     implicit none
     type(transport_parameters), intent(out) :: tp
     real(dp),intent(in) :: initial_concentration,inlet_concentration
-    
+
     real(dp):: initial_mass
 
     character(len=60):: sub_name
@@ -231,13 +231,13 @@ contains
 
     sub_name = 'initial_transport'
     call enter_exit(sub_name,1)
-    
+
     tp%initial_concentration = initial_concentration
     node_field(nj_conc1,1:num_nodes) = tp%initial_concentration(1)
 
     ! initialise the 'ideal mass' to the mass of gas initially in model
     call calc_mass(nj_conc1,nu_conc1,tp%ideal_mass)
-    
+
     tp%inlet_concentration = inlet_concentration
     node_field(nj_conc1,1) = tp%inlet_concentration(1)
     tp%total_volume_change = 0.0_dp ! records the volume change from FRC
@@ -259,7 +259,7 @@ contains
     call enter_exit(sub_name,2)
 
   end subroutine intial_transport
-  
+
   !!!##########################################################################
 
   subroutine reduce_transport_matrix(MatrixSize,NonZeros,noffset_entry,noffset_row,&
@@ -305,8 +305,8 @@ contains
     endif
 
   end subroutine reduce_transport_matrix
-  
-  
+
+
 !
 !##############################################################################
 !
@@ -316,7 +316,7 @@ contains
    use arrays, only: dp,elem_units_below,gasex_field,node_field,num_nodes,&
          num_units,unit_field
    use diagnostics, only: enter_exit
-   
+
 
    !local variables
    real(dp),intent(in) :: initial_concentration
@@ -376,7 +376,7 @@ contains
 
    call enter_exit(sub_name,2)
  end subroutine initial_gasexchange
- 
+
  !!!################################################################################
 
   subroutine calc_mass(nj,nu_field,gas_mass)
@@ -429,8 +429,8 @@ contains
     call enter_exit(sub_name,2)
 
   end subroutine calc_mass
-  
-  
+
+
 !!!########################################################################
 
   subroutine sparse_transport
@@ -477,10 +477,10 @@ contains
     enddo !noelem
 
     NonZeros_unreduced = n_unreduced - 1
-    
+
   end subroutine sparse_transport
-  
- !########################## 
+
+ !##########################
   subroutine set_elem_volume
     use arrays,only: dp,elem_field,elem_nodes,node_xyz,num_elems
     use diagnostics, only: enter_exit
@@ -512,7 +512,7 @@ contains
        ! element volume
        elem_field(ne_vol,ne) = PI * elem_field(ne_radius,ne)**2 * &
             elem_field(ne_length,ne)
-            
+
        elem_field(ne_a_A,ne) = 1.0_dp ! set default for ratio a/A
 
 
@@ -521,8 +521,8 @@ contains
     call enter_exit(sub_name,2)
 
   end subroutine set_elem_volume
-  
-  
+
+
   subroutine element_gasmix(ne,elem_K,elem_M,elem_R,diffusion_coeff)
     use arrays,only: dp,elem_field,elem_symmetry
     use indices,only: ne_a_A,ne_length,ne_radius
@@ -555,10 +555,10 @@ contains
     elem_R = 0.0_dp
 
   end subroutine element_gasmix
-  
+
     !!!########################################################################
 !!! original code developed by Falko Schmidt (2011). Adapted by Merryn Tawhai
-  subroutine element_particles(ne,elem_K,elem_M,elem_R) 
+  subroutine element_particles(ne,elem_K,elem_M,elem_R)
 
     use other_consts
     use arrays
@@ -580,14 +580,15 @@ contains
     a_A_ratio = elem_field(ne_a_A,ne)
     outer_area=PI*radius**2
     inner_area=outer_area*a_A_ratio
-
-    if(elem_field(ne_flow,1).gt.0.0_dp)then ! inhalation
+    if(ne_flow.ne.0)then
+      if(elem_field(ne_flow,1).gt.0.0_dp)then ! inhalation
        ! apparent diffusion acc.to. Lee2001 exhalation
-       kappa = 0.26_dp*abs(elem_field(ne_flow,ne))*2.0_dp/pi/radius 
-       kappa = kappa/6.0_dp/radius*elem_field(ne_length,ne)
+        kappa = 0.26_dp*abs(elem_field(ne_flow,ne))*2.0_dp/pi/radius
+        kappa = kappa/6.0_dp/radius*elem_field(ne_length,ne)
        ! using this kappa is f(l) instead f(d) - see results validation Gomes1993
-    else ! exhalation
+        else ! exhalation
        kappa = 0.26_dp*abs(elem_field(ne_flow,ne))*2.0_dp/pi/radius ! apparent diffusion acc.to. Lee2001 exhalation
+      endif
     endif
 
     elem_M(1,1) = outer_area*length/3.0_dp*DBLE(elem_symmetry(ne))

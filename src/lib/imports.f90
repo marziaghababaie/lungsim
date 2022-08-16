@@ -14,7 +14,7 @@ module imports
   use indices
   use other_consts
   use ventilation
-  
+
   implicit none
 
   !Module parameters
@@ -24,7 +24,7 @@ module imports
   !Module variables
 
   !Interfaces
-  private 
+  private
   public import_ventilation
   public import_perfusion
 
