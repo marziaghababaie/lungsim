@@ -20,8 +20,10 @@ module particle_transport
 
   public where_inlist, inlist
   public calc_mass_particles
-    public write_terminal, write_airway
-    public write_deposition
+  public write_terminal, write_airway
+
+  !public branch_length
+
 
 contains
 
@@ -97,9 +99,11 @@ contains
     part_param%dt_gm = 0.02_dp
     part_param%VtotTLC = 186.89_dp
     part_param%totacinarLength = 7.73_dp
+    !part_param%mu = 52e-3_dp !Pa.s
     part_param%mu = 18.69e-6_dp  ! Pa.s
-    part_param%prho =  1.0e-3_dp             ! density of particles [g/mm^3]
+    part_param%prho =  1.202e-3_dp             ! density of particles [g/mm^3]
     part_param%lambda = 7.022e-5_dp  ! [mm] mean free path necessary
+    ! part_param%lambda = 7.422e-5_dp  for 37 degree c ! [mm] mean free path necessary
     part_param%kBoltz = 1.38e-14_dp  ! ! Boltzmann constant [J/K*1d9]=[kg*m^2/s^2/K*1d9]=[g*mm^2/s^2/K]
     part_param%Temperature = 36.0_dp+273.15_dp ! Temperature [K] from rho*R*T
     part_param%out_itr_max = 200      ! max # (outer) iterations using GMRES solver.
@@ -121,27 +125,41 @@ contains
     call read_params_evaluate_flow(Gdirn, chest_wall_compliance, &
        constrict, COV, FRC, i_to_e_ratio, pmus_step, press_in,&
        refvol, RMaxMean, RMinMean, T_interval, volume_target, expiration_type)
-
+    ! z = 0
     if(GDirn.eq.1) then
       part_param%gravityx = 9.81_dp*1.0e3_dp
       part_param%gravityy = 0.0_dp
       part_param%gravityz = 0.0_dp
+      part_param%grav_factor = 1
     else if(GDirn.eq.2) then
       part_param%gravityx = 0.0_dp
       part_param%gravityy = 9.81_dp*1.0e3_dp
       part_param%gravityz = 0.0_dp
+      part_param%grav_factor = 1
     else if (GDirn.eq.3) then !Needs checking, may not always be consistent with mesh
       part_param%gravityx = 0.0_dp
       part_param%gravityy = 0.0_dp
       part_param%gravityz = 9.81_dp*1.0e3_dp ! *MHT change*
+      part_param%grav_factor = 1
+    else if (GDirn.eq.0) then
+        part_param%gravityx = 0.0_dp
+        part_param%gravityy = 0.0_dp
+        part_param%gravityz = 0.0_dp ! *MHT change*
+        part_param%grav_factor = 0
+    else
+     print *, "ERROR: Posture not recognised (currently only x=1,y=2,z=3))"
+     call exit(0)
     endif
+
+    ! TJ - uncomment for zero gravity
+    print *, 'Gravity Factor', part_param%grav_factor
 
     part_param%time_inspiration = 2.0_dp
     part_param%time_breath_hold = 1.0_dp
     part_param%time_expiration = 2.0_dp
     part_param%tidal_volume = volume_target! tidal volume target, mm^3
     part_param%FRC = FRC
-    part_param%initial_volume =FRC*1.0e+6_dp !initial volume of air inlungs
+    part_param%initial_volume =FRC*1.0e+6_dp !initial volume of air in lungs
 
     call set_elem_volume()
     call volume_of_mesh(part_param%initial_volume,volume_tree) ! to get deadspace volume
@@ -157,8 +175,8 @@ contains
     write(*,'('' Respiratory volume   = '',F8.3,'' L'')') (part_param%initial_volume-volume_tree)/1.0e+6_dp !in L
     write(*,'('' Total lung volume    = '',F8.3,'' L'')') part_param%initial_volume/1.0e+6_dp !in L
     write(*,'('' Inlet flow           = '',f8.3,'' L.s^-1'')') abs(elem_field(ne_Vdot,1))/1.0e+6_dp
-    write(*,'('' Inlet concentration  = '',f16.14,      '' g.mm^-3'')') node_field(nj_conc1,1)
-    write(*,'('' Particle size        = '',f8.3,'' micron m^-3'')') (part_param%pdia * 1.0e+3_dp)
+    write(*,'('' Inlet concentration  = '',f8.3,'' g.mm^-3'')') node_field(nj_conc1,1)
+    write(*,'('' Particle size        = '',f8.3,'' micrm'')') (part_param%pdia * 1.0e+3_dp)
 
      op_name = 'file_particle' !ARC TEMP placeholder
     ! print *, 'op_name is', op_name
@@ -184,20 +202,20 @@ contains
     ttime = 0.0_dp
     time = 0.0_dp
 
-   if(write_mass)then
-      write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Total|BrnLumen|BrnDepos|AlvLumen|AlvDepos|'',&
-           &''   volEr|  MassEr|    C_inlet|  Mass by gen'')')
-      write(*,'(''   (s)|  (L/s)|     (L)|   (L)|    (g)  |    Mass|    Mass|    Mass|    Mass|    Mass|'',&
-           &''    %   |    %   |  (g.mm^-3)|       (g)   '')')
-   else
-      write(*,'(58x, ''||----------------------------- Mass (g) in:-----------------------------||'')')
-      write(*,'(''  Time|   dVol|     Vol ( %Err) |IdlMass|    Mass ( %Err) |'',&
-           &'' Bronch| Bronch| -diff-| -sedi-| -impc-| Alveol| Alveol| '',&
-           &''-diff-| -sedi-  | DF tot| DF brn| DF alv|'')')
-      write(*,'(''   (s)|    (L)|     (L)         |   (g) |     (g)         |'',&
-           &''  lumen|   wall|       |       |       |  lumen|   wall|'',&
-           &''       |         |       |       |       |'')')
-   endif
+    if(write_mass)then
+       write(*,'(''  Time|   Flow|    dVol|   Vol|  IdlMass|   Total|BrnLumen|BrnDepos|AlvLumen|AlvDepos|'',&
+            &''   volEr|  MassEr|    C_inlet|  Mass by gen'')')
+       write(*,'(''   (s)|  (L/s)|     (L)|   (L)|    (g)  |    Mass|    Mass|    Mass|    Mass|    Mass|'',&
+            &''    %   |    %   |  (g.mm^-3)|       (g)   '')')
+    else
+       write(*,'(58x, ''||----------------------------- Mass (g) in:-----------------------------||'')')
+       write(*,'(''  Time|   dVol|     Vol ( %Err) |IdlMass|    Mass ( %Err) |'',&
+            &'' Bronch| Bronch| -diff-| -sedi-| -impc-| Alveol| Alveol| '',&
+            &''-diff-| -sedi-  | DF tot| DF brn| DF alv|'')')
+       write(*,'(''   (s)|    (L)|     (L)         |   (g) |     (g)         |'',&
+            &''  lumen|   wall|       |       |       |  lumen|   wall|'',&
+            &''       |         |       |       |       |'')')
+    endif
 
 !###########################################################
     !do nbreath = 1, part_param%num_brths_gm!1!ARC TEMP
@@ -207,18 +225,20 @@ contains
      inlet_flow = abs(elem_field(ne_Vdot,1))
      call scale_flow_field(inlet_flow)
 
-      time_start = time_start + time_end
-      time_end = time_end + part_param%time_inspiration ! 0.05_dp!0.1_dp
-      ! ----------------- origin -----------------
-    ! !         time_start = time_end
-    ! !        time_end = time_start + part_param%time_inspiration
-    ! !        time_end = 0.1_dp
-    !      ! ------------------------------------------
-       node_field(nj_conc1,1) = tp%inlet_concentration(1) ! need to set here
+     time_start = time_start + time_end
+     time_end = time_end + part_param%time_inspiration ! 0.05_dp!0.1_dp
+     ! ----------------- origin -----------------
+!     time_start = time_end
+!     time_end = time_start + part_param%time_inspiration
+!     time_end = 0.1_dp
+     ! ------------------------------------------
+     node_field(nj_conc1,1) = tp%inlet_concentration(1) ! need to set here
+
      call solve_particles(fileid,time_end,time_start,.true.,last_breath,tp,part_param,write_mass)
      nstep = nbreath
-        ! write(*,*) 'nstep',nstep
-
+!     write(*,*) 'nstep',nstep
+!
+!
 !!! Breath Hold
 !!----------------
 !     if(part_param%time_breath_hold.gt.0.0_dp)then
@@ -345,18 +365,19 @@ contains
 
        call cpu_time(cpu_dt_start)
        time = time + dt ! increment time
+!       if(inlet_flow.gt.0.0_dp) node_field(nj_conc1,1) = tp%inlet_concentration(1) ! reset the inlet concentration
+!          changing the time of inhaled particles from the whole 2 seconds to the first 0.5 sec and then zero initial concen
+       if(inlet_flow.gt.0.0_dp) node_field(nj_conc1,1) = tp%inlet_concentration(1) ! reset the inlet concentration
+       !    if (time.gt.0.33_dp)then
+       !     node_field(nj_conc1,1)=0.0_dp
+       !     write(*,*)'time', time, 'concentration', node_field(nj_conc1,1)
+       !    else
+       !    node_field(nj_conc1,1) = tp%inlet_concentration(1) ! need to set here
+       ! write(*,*)'time', time, 'concentration', node_field(nj_conc1,1)
+       !    end if
 
-       !changing the time of inhaled particles from the whole 2 seconds to the first 0.5 sec and then zero initial concen
-      if(inlet_flow.gt.0.0_dp) node_field(nj_conc1,1) = tp%inlet_concentration(1) ! reset the inlet concentration
-         if (time.gt.0.5_dp)then
-          node_field(nj_conc1,1)=0.0_dp
-          !write(*,*)'time', time, 'concentration', node_field(nj_conc1,1)
-         else
-         node_field(nj_conc1,1) = tp%inlet_concentration(1) ! need to set here
-      !write(*,*)'time', time, 'concentration', node_field(nj_conc1,1)
-         end if
-
-if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
+       ! if(inlet_flow.gt.0.0_dp) node_field(nj_conc1,1) = tp%inlet_concentration(1) ! reset the inlet concentration
+       if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
           call airway_mesh_deform(dt,part_param%initial_volume,part_param%coupled,'particles',tp,part_param) ! change model size by dV
           call general_track(dt,.true.,tp,part_param)
           call particle_velocity(dt,part_param)
@@ -460,31 +481,32 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
        dep_eff_alv = unit_wall/current_mass
        dep_eff_bronch = mass_deposit/current_mass
 
-      if(write_mass)then
-         write(*,'(f7.3,3(f8.3),f10.2,7(f9.2),f10.5,'' |'',16(f6.1))') &
-              time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
-              current_volume/1.0e+6_dp,tp%ideal_mass,current_mass,lumen_mass, &
-              mass_deposit,unit_mass, unit_wall, volume_error, &
-              mass_error,node_field(nj_conc1,1),(mass_by_gen(i),i=1,16)
-      else
-         write(*,'(f7.3,2(f8.3),'' ('',f5.2,'') |'',2(f8.2),'' ('',f5.2,'') |'',9(f8.2),'' |'',3(f8.3))') &
-              time,tp%total_volume_change/1.0e+6_dp,current_volume/1.0e+6_dp, volume_error, &
-              tp%ideal_mass, &
-              current_mass, &  ! the mass in the entire model
-              mass_error, &    ! error in total mass
-              lumen_mass, &    ! the mass in the bronchial airway lumen
-              mass_deposit, &  ! the total mass deposited on bronchial airway walls
-              sum(node_field(nj_loss_dif,1:num_nodes)), &  ! bronchial dep mass by diffusion
-              sum(node_field(nj_loss_sed,1:num_nodes)), &  ! bronchial dep mass by sedimentation
-              sum(node_field(nj_loss_imp,1:num_nodes)), &  ! bronchial dep mass by impaction
-              unit_mass, &     ! the mass in the alveolar airway lumen
-              unit_wall, &     ! the total mass deposited on alveolar walls
-              sum(unit_field(nu_loss_dif,1:num_units)), &  ! alveolar dep mass by diffusion
-              sum(unit_field(nu_loss_sed,1:num_units)), &  ! alveolar dep mass by sedimentation
-              dep_eff_alv+dep_eff_bronch, &  ! total deposition fraction
-              dep_eff_bronch, &  ! airway deposition fraction
-              dep_eff_alv        ! acinar deposition fraction
-      endif
+       if(write_mass)then
+          write(*,'(f7.3,3(f8.3),f10.3,7(f9.3),f10.5,'' |'',16(f6.1))') &
+               time,inlet_flow/1.0e+6_dp,tp%total_volume_change/1.0e+6_dp,&
+               current_volume/1.0e+6_dp,tp%ideal_mass,current_mass,lumen_mass, &
+               mass_deposit,unit_mass, unit_wall, volume_error, &
+               mass_error,node_field(nj_conc1,1),(mass_by_gen(i),i=1,16)
+       else
+          write(*,'(f7.3,2(f8.3),'' ('',f8.5,'') |'',2(f8.3),'' ('',f5.3,'') |'',9(f8.3),'' |'',3(f8.3))') &
+               time,tp%total_volume_change/1.0e+6_dp,current_volume/1.0e+6_dp, volume_error, &
+               tp%ideal_mass, &
+               current_mass, &  ! the mass in the entire model
+               mass_error, &    ! error in total mass
+               lumen_mass, &    ! the mass in the bronchial airway lumen
+               mass_deposit, &  ! the total mass deposited on bronchial airway walls
+               sum(node_field(nj_loss_dif,1:num_nodes)), &  ! bronchial dep mass by diffusion
+               sum(node_field(nj_loss_sed,1:num_nodes)), &  ! bronchial dep mass by sedimentation
+               sum(node_field(nj_loss_imp,1:num_nodes)), &  ! bronchial dep mass by impaction
+               unit_mass, &     ! the mass in the alveolar airway lumen
+               unit_wall, &     ! the total mass deposited on alveolar walls
+               sum(unit_field(nu_loss_dif,1:num_units)), &  ! alveolar dep mass by diffusion
+               sum(unit_field(nu_loss_sed,1:num_units)), &  ! alveolar dep mass by sedimentation
+               dep_eff_alv+dep_eff_bronch, &  ! total deposition fraction
+               dep_eff_bronch, &  ! airway deposition fraction
+               dep_eff_alv        ! acinar deposition fraction
+       endif
+
        err = mass_error
 
 !      if(last_breath.and.coupled)then
@@ -507,26 +529,84 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
     write(*,'('' End of breath deposition efficiencies:'')')
     write(*,'(5x, ''TOTAL DE ='', f6.3, ''   BRONCHIAL DE ='',f6.3, ''   ALVEOLAR DE='',f6.3)') &
          dep_eff_alv+dep_eff_bronch,dep_eff_bronch,dep_eff_alv
-    write(*,'(5x, ''Diffusive-    '',5x, f16.8, 15x, f16.8)') &
-         sum(node_field(nj_loss_dif,1:num_nodes)), sum(unit_field(nu_loss_dif,1:num_units))
-    write(*,'(5x, ''Sedimentation-'',5x, f16.8, 15x, f16.8)') &
+    write(*,'(5x, ''Diffusive-    '',5x, f8.3, 15x, f8.3)') &
+         sum(node_field(nj_loss_dif,1:num_nodes)),sum(unit_field(nu_loss_dif,1:num_units))
+    write(*,'(5x, ''Sedimentation-'',5x, f8.3, 15x, f8.3)') &
          sum(node_field(nj_loss_sed,1:num_nodes)), sum(unit_field(nu_loss_sed,1:num_units))
-    write(*,'(5x, ''Impaction-    '',5x, f16.8, 15x, ''   -'')') &
+    write(*,'(5x, ''Impaction-    '',5x, f8.3, 15x, ''   -'')') &
          sum(node_field(nj_loss_imp,1:num_nodes))
-    write(*,'(5x, ''Totals--      '',5x, f8.5, 15x, f8.5)') dep_eff_bronch, dep_eff_alv
-    write(*,'(5x, ''mass error--      '',5x, f16.8)') mass_error
+    write(*,'(5x, ''Totals--      '',5x, f8.3, 15x, f8.3)') dep_eff_bronch, dep_eff_alv
     write(*,'(''---------------------------------------'')')
-
+  !  write(*,'(Fr number)'), elem_field(ne_flow,ne)/SQRT(abs((elem_field(ne_radius,ne)*9.81e3_dp))
     call write_terminal('terminal', name)
-!  write(*, '(''end write terminal'')')
-    !call write_airway(ne_field, 'airway_result', groupname, field_name)
-  !  write(*, '(''end write airway'')')
-  write(*, '(''no write airway for loop'')')
-    call write_deposition('deposition_output', dep_eff_bronch, dep_eff_alv ,name)
+    call write_airway(ne_field, 'airway_result', groupname, field_name)
     !print *, "alter", unit_wall/(unit_mass + unit_wall)
-  !  write(*, '(''end write deposition'')')
+    call write_deposition('deposition_output', dep_eff_bronch, dep_eff_alv)
+    call stoksnumber(part_param)
     call enter_exit(sub_name,2)
   end subroutine solve_particles
+
+
+
+
+
+  ! --------------------------- move ventilation here ------------------------------------------
+
+  ! #################################################################
+      subroutine write_deposition(filename, dep_eff_bronch, dep_eff_alv)
+
+        use arrays
+        use exports,only: export_node_field
+        use geometry, only: volume_of_mesh
+        use solve,only: pmgmres_ilu_cr
+        use species_transport, only: assemble_transport_matrix,reduce_transport_matrix,calc_mass
+        use other_consts
+        use indices
+        use diagnostics, only: enter_exit
+
+        implicit none
+        real(dp), intent(in) :: dep_eff_alv, dep_eff_bronch
+        character, intent(in):: filename
+        !type(particle_parameters) :: part_param
+        !type(transport_parameters) :: tp
+        integer :: len_end,ne
+        integer :: np0, np1, np2, ne_field, nj, ne0, ne_stem
+        real(dp) :: midpoint(3)
+        logical :: CHANGED
+        character(len=300) :: writefile
+        character(len=60) :: sub_name
+        !character(LEN=10) :: lobe
+        integer :: ifile=10
+        character :: readfile*150
+        !groupname = 'vent_model'
+        !field_name = 'bronchial_deposition'
+        np0 = 1
+
+        if(index(filename, ".txt")>0)then ! full filename is given
+           readfile = trim(filename)
+        else! append correct extension
+           readfile = trim(filename)//'.txt'
+        endif
+        open(ifile, file=readfile, status='replace')
+          if(num_nodes.ne.0.and.num_units.ne.0)then
+                  write(10,'( f8.3, f8.3, f8.3, f16.10, f16.10, f16.10, f16.10, f16.10)') &
+                  !  write(*,'(5x, ''TOTAL DE ='', f6.3, ''   BRONCHIAL DE ='',f6.3, ''   ALVEOLAR DE='',f6.3)') &
+                  dep_eff_alv+dep_eff_bronch, dep_eff_bronch, dep_eff_alv, &
+                    !write(*,'(5x, ''Diffusive-    '',5x, f16.8, 15x, f16.8)') &
+
+                  sum(node_field(nj_loss_dif,1:num_nodes)), sum(unit_field(nu_loss_dif,1:num_units)), &
+                    !write(*,'(5x, ''Sedimentation-'',5x, f16.8, 15x, f16.8)') &
+                  sum(node_field(nj_loss_sed,1:num_nodes)), sum(unit_field(nu_loss_sed,1:num_units)), &
+                  !  write(*,'(5x, ''Impaction-    '',5x, f16.8, 15x, ''   -'')') &
+                  sum(node_field(nj_loss_imp,1:num_nodes))
+       !  write(*,'(5x, ''Totals--      '',5x, f8.5, 15x, f8.5)')
+                     !dep_eff_bronch, dep_eff_alv
+                    !write(*,'(5x, ''mass error--      '',5x, f16.8)') mass_error
+                    !write(*,'(''---------------------------------------'')')  !write(10,'(1X,''Lobe: '', A10)') lobe !element_lobe(ne)
+          endif
+      close(ifile)
+      end subroutine write_deposition
+
 
 
 
@@ -550,7 +630,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
             real(dp) :: midpoint(3)
             logical :: CHANGED
             character(len=300) :: writefile
-            character(len=60) :: sub_name, groupname, field_name, filename
+            character :: sub_name, groupname, field_name, filename
         character(LEN=10) :: lobe
         integer :: ifile=10
         character :: readfile*150
@@ -587,14 +667,17 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
             case default
                 lobe = 'Trachea' !'copious free time'
           end select
-
-          write(10,'(I6, 4(F10.2),  2(I5), 2x, A5, 2(F7.3), 5(D11.3))') &
+            if(ne.ne.0.and.ne_radius.ne.0.and.ne_flow.ne.0.and.ne_mass.ne.0)then
+                  write(10,'(I6, 4(F10.2),  2(I5), 2x, A5, 2(F7.3), 7(D11.3))') &
                   ne, (node_xyz(:, np1) + node_xyz(:, np2))/2, &
                   sqrt(sum((midpoint(:) - node_xyz(:, np0))**2)), & ! distance
                   elem_ordrs(1,ne), elem_ordrs(2,ne), lobe, elem_field(ne_length,ne), &
-                  elem_field(ne_radius,ne), elem_field(ne_part_vel,ne), elem_field(ne_mass,ne), &
+                  elem_field(ne_radius,ne), elem_field(ne_flow,ne), elem_field(ne_mass,ne), &
                   node_field(nj_loss_dif, ne), node_field(nj_loss_imp, ne), &
-                  node_field(nj_loss_sed, ne) ! alveolar dep mass by sed
+                  node_field(nj_loss_sed, ne), & ! alveolar dep mass by sed
+                  node_field(nj_conc1, ne),&! concentration
+                  elem_field(ne_flow,ne)/SQRT(elem_field(ne_radius,ne)*9.81e3_dp)
+           endif
         end do
         close(ifile)
     end subroutine write_airway
@@ -657,6 +740,8 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
                 lobe = 'RML' !'copious free time'
           end select
 
+          ! TJ - find the concentration array!
+
           write(10,'(I6, 3(f10.2), f10.2, A7, f8.3, f10.2, 3(D11.3))') &
                   np, (node_xyz(:,np)), sqrt(sum((node_xyz(:, np) - node_xyz(:, np0))**2)), &  ! distance
                   lobe, unit_field(nu_vol,nolist), unit_field(nu_vdot0,nolist), &
@@ -669,62 +754,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
     end subroutine write_terminal
 
 !!!###################################################################################
-!!!#########################################################################
 
-    subroutine write_deposition(filename, dep_eff_bronch, dep_eff_alv, name)
-
-      use arrays
-      use exports,only: export_node_field
-      use geometry, only: volume_of_mesh
-      use solve,only: pmgmres_ilu_cr
-      use species_transport, only: assemble_transport_matrix,reduce_transport_matrix,calc_mass
-      use other_consts
-      use diagnostics, only: enter_exit
-
-      implicit none
-      real(dp), intent(in) :: dep_eff_alv, dep_eff_bronch
-      character(len=60), intent(in):: filename
-      !type(particle_parameters) :: part_param
-      !type(transport_parameters) :: tp
-          integer :: len_end,ne
-          integer :: np0, np1, np2, ne_field, nj, ne0, ne_stem
-          real(dp) :: midpoint(3)
-          logical :: CHANGED
-          character(len=300) :: writefile
-          character(len=60) :: sub_name, name, field_name
-      character(LEN=10) :: lobe
-      integer :: ifile=10
-      character :: readfile*150
-      !groupname = 'vent_model'
-      !field_name = 'bronchial_deposition'
-      name = 'deposition_output'
-      np0 = 1
-
-      if(index(filename, ".txt")>0)then ! full filename is given
-         readfile = trim(filename)
-      else! append correct extension
-         readfile = trim(filename)//'.txt'
-      endif
-      open(ifile, file=readfile, status='replace')
-
-          write(10,'( f8.3, f8.3, f8.3, f16.10, f16.10, f16.10, f16.10, f16.10)') &
-                !  write(*,'(5x, ''TOTAL DE ='', f6.3, ''   BRONCHIAL DE ='',f6.3, ''   ALVEOLAR DE='',f6.3)') &
-                dep_eff_alv+dep_eff_bronch, dep_eff_bronch, dep_eff_alv, &
-                  !write(*,'(5x, ''Diffusive-    '',5x, f16.8, 15x, f16.8)') &
-                sum(node_field(nj_loss_dif,1:num_nodes)), sum(unit_field(nu_loss_dif,1:num_units)), &
-                  !write(*,'(5x, ''Sedimentation-'',5x, f16.8, 15x, f16.8)') &
-                sum(node_field(nj_loss_sed,1:num_nodes)), sum(unit_field(nu_loss_sed,1:num_units)), &
-                !  write(*,'(5x, ''Impaction-    '',5x, f16.8, 15x, ''   -'')') &
-                sum(node_field(nj_loss_imp,1:num_nodes))
-                !  write(*,'(5x, ''Totals--      '',5x, f8.5, 15x, f8.5)')
-                   !dep_eff_bronch, dep_eff_alv
-                  !write(*,'(5x, ''mass error--      '',5x, f16.8)') mass_error
-                  !write(*,'(''---------------------------------------'')')  !write(10,'(1X,''Lobe: '', A10)') lobe !element_lobe(ne)
-
-        close(ifile)
-    end subroutine write_deposition
-
-!!!###################################################################################
   subroutine scale_flow_field(inlet_flow)
 
 !   use arrays,only: dp,elem_field,num_elems,num_units,unit_field
@@ -1385,7 +1415,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
     type(particle_parameters) :: part_param
     real(dp),intent(in) :: dt
     integer :: j,ne,np,np2
-    real(dp) :: ref_flow,rel_flow,alpha,abbr,vs, Ccun
+    real(dp) :: ref_flow,rel_flow,alpha,abbr,vs, Ccun, stoknum
     real(dp) :: vector1(3),vector2(3),vseff
     character(len=60) :: sub_name
 
@@ -1404,6 +1434,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
     vs = (part_param%prho)*part_param%gravityz*part_param%pdia**2.0_dp&
                                              *Ccun/(18.0_dp*part_param%mu)
 
+
     do ne = 1,num_elems  !loop over all 1D elements
        np = elem_nodes(1,ne)  ! proximal node number
        np2 = elem_nodes(2,ne) ! distal node number
@@ -1415,9 +1446,10 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
 !       vector2(3) = node_xyz(3,np)+1.0_dp  ! *MHT original*
        vector2(3) = -1.0_dp                   ! *MHT change*
        alpha = angle_btwn_vectors(vector1,vector2)
-
+       !write(*,*) ne, alpha
 !!! settlement velocity w.r.t. flow direction; set equal to zero to deactivate gravity effect
-       vseff = cos(alpha)*pi*elem_field(ne_radius,ne)**2.0_dp * vs
+       !vseff = 0 ! TJ - 0G
+       vseff = cos(alpha)*pi*elem_field(ne_radius,ne)**2.0_dp * vs * part_param%grav_factor
 
 !!! note following:
 !!! ne_part_vel was stored as nej_flow in cmiss
@@ -1433,15 +1465,16 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
        if(abbr.gt.-25.0_dp) elem_field(ne_part_vel,ne)=elem_field(ne_part_vel,ne) &
                                                           + rel_flow*exp(abbr)
 
+
 !!! calculate spatial derivative of particle velocity
 !       elem_field(ne_dpart_vel,ne) = 0.0_dp !(XP(nk,nv2,nej_flow,np2)/XP(1,nv2,nj_radius,np2)**2 &
 !            -XP(nk,nv,nej_flow,np)/XP(1,nv2,nj_radius,np)**2 )/elem_field(ne_length,ne)/PI    ! spatial derivative of particle velocity
 !       XP(2,nv2,nej_flow,np2) = (XP(nk,nv,nej_flow,np)/XP(1,nv2,nj_radius,np)**2 &
 !            -XP(nk,nv2,nej_flow,np2)/XP(1,nv2,nj_radius,np2)**2)/elem_field(ne_length,ne)/PI
     enddo
-
+    !stop
     call enter_exit(sub_name,2)
-
+    !print *, 'vseff', vseff
   end subroutine particle_velocity
 
 !!!#######################################################################################
@@ -1460,7 +1493,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
     use arrays
     use indices
     use other_consts
-    use mesh_utilities,only: angle_btwn_points,angle_btwn_vectors
+    use mesh_utilities,only: angle_btwn_points,angle_btwn_vectors,cumulative_branch_length
     use diagnostics, only: enter_exit
 
     implicit none
@@ -1474,8 +1507,8 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
     real(dp) :: A(3),abbr(9),abbr_t1,abbr_t2,alpha,Atube,B(3),C(3),coeffDiffSph(1:1000,2), &
          crossec(0:9),current_volume,Dalv,deltaV(-1:9),DepFrac(4:6),h,j2,lduct,length,radius(0:9),Rin, &
          unit_loss,Vduct(0:9),veloc(0:9),vfluid,volume(9),vol_croot_scale,Vtot,Vtube,Z(3)!Vdep(0:6),
-    real(dp) :: Vdep(0:7) ! TJ add sedimentation in alveoli
-    real(dp) :: mass_loss_np,mean_conc,part_acinus_old(9)
+    real(dp) :: Vdep(0:7), Ccun ! TJ add sedimentation in alveoli
+    real(dp) :: mass_loss_np,mean_conc,part_acinus_old(9),stoknum,Fr
     real(dp),allocatable :: part_concentration(:)
     logical :: acinar_deposition = .true., flag
     character(len=60) :: sub_name
@@ -1515,7 +1548,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
              B(:) = node_xyz(:,np)  ! *MHT change*
           endif
     ! *MHT change* for following: not clear if should be branch length of segment length? currently original
-          lduct = branch_length(ne) ! this is the length of the whole (unrefined) branch, i.e. between bifurcations
+          lduct = cumulative_branch_length(ne) ! this is the length of the whole (unrefined) branch, i.e. between bifurcations
           !element (tube) length - since loop is over every node adjacent element, half length is used
           length = elem_field(ne_length,ne)/2.0_dp
           !lduct = length ! *MHT change*- actually keeps the same as original
@@ -1524,7 +1557,17 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
           Vtube = Atube*length ! element (tube) volume
           Vtot = Vtot+Vtube  ! sum up total volume
           vfluid = elem_field(ne_Vdot,ne)/Atube  ! fluid velocity [mm/s]
+          Ccun = 1.0_dp + 2.0_dp * part_param%lambda/part_param%pdia &
+               * (1.257_dp+0.4_dp*exp(-0.55_dp*part_param%pdia/part_param%lambda))
+          radius(0) = elem_field(ne_radius,ne)
+          veloc(0) = elem_field(ne_part_vel,ne)/pi/radius(0)**2.0_dp ! velocity terminal bronchi
+           stoknum = (part_param%prho)*veloc(0)*part_param%pdia**2.0_dp&
+                                *Ccun/(18.0_dp*radius(0)*part_param%mu)
 
+
+          Fr= veloc(0)/(SQRT(part_param%gravityz*2.0_dp*radius(0)))
+                    print *, "st", stoknum
+                 print *, "fr", Fr
 !!!! MHT 021221 - this is wrong here: vector2 should reflect the actual gravitational vector. here it assumes Z axis
 !!! CALCULATE ANGLE BETWEEN TUBE AXIS AND GRAVITATION DIRECTION
           !A(:) = node_xyz(:,np) !stores element coordinates in A,B! *MHT original*
@@ -1534,13 +1577,17 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
           !alpha = abs(angle_btwn_points(B,A,Z)) ! calculate angle between tube axis and gravity vector! *MHT original*
           z = 0.0_dp ! *MHT change*
           z(3) = -1.0_dp  ! *MHT change*
+          !z(3) = 1.0_dp ! 1G inverted
           alpha = abs(angle_btwn_vectors(B-A,Z)) ! calculate angle between tube axis and gravity vector! *MHT change*
 
 !! sedimentation
           ! *MHT  -original ! TJ change back, should be prho (the density of the sphere)
-          Vdep(1) = Vdep(1) + abs(sin(alpha))*part_param%prho* 9.81e3_dp * &
-                              part_param%pdia**2.0_dp*&
-                         length*radius(0)*dt/9.0_dp/part_param%mu ! deposition volume due to sedimentation
+          Vdep(1) = (Vdep(1) + abs(sin(alpha))*part_param%prho* 9.81e3_dp * &
+                    part_param%pdia**2.0_dp* &
+                         length*radius(0)*dt/9.0_dp/part_param%mu)*part_param%grav_factor
+          ! deposition volume due to sedimentation
+         ! Vdep(1) = 0 !TJ - test for 0G
+
           ! *MHT change*
 !          mean_conc = 0.5_dp * (node_field(nj_conc1,np) + node_field(nj_conc1,np2))
 !!          Vdep(1) = Vdep(1) + abs(sin(alpha)) * mean_conc * 9.81e3_dp * part_param%pdia**2.0_dp * &
@@ -1648,6 +1695,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
             abbr(4) = 0.0_dp  ! variable to store axial position for radius scaling
 
             veloc(0) = elem_field(ne_part_vel,ne)/pi/radius(0)**2.0_dp ! velocity terminal bronchi
+
             deltaV(-1) = dt*elem_field(ne_Vdot,ne) ! total volume change of acinus in one time step
             deltaV(0) = 0.0_dp ! assumption that volume change very small since no alveoli
             crossec(0) = radius(0)**2.0_dp*pi ! cross-sectional area of terminal bronchiole in FEM model
@@ -1657,6 +1705,8 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
                radius(gen) = (part_param%totacinarLength*vol_croot_scale-abbr(4)) &
                     /(part_param%totacinarLength*vol_croot_scale)*abbr(3)+ &
                     part_param%RacTLC(gen+1)*vol_croot_scale
+
+               ! radius(gen) = part_param%RacTLC(gen+1)*vol_croot_scale
                crossec(gen) = pi*radius(gen)**2.0_dp*(2.0_dp**gen) ! accumulated duct cross-sectional area
                Vduct(gen) = crossec(gen)*part_param%LacTLC(gen+1)*vol_croot_scale  ! duct volume in acinar region
                volume(gen) = part_param%VacTLC(gen) * (current_volume/part_param%VtotTLC) - Vduct(gen)
@@ -1689,15 +1739,19 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
 !!!!............ sedimentation in alveolar tissue
 
                 ! TJ - add EQN (56)
-                Vdep(7) = Vdep(7)+ pi * part_param%prho *9.81e3_dp &
+                Vdep(7) = (Vdep(7)+ pi * part_param%prho * 9.81e3_dp &
                         *part_param%pdia**2.0_dp *dt *Dalv**2 &
-                        /72.0_dp/part_param%mu
+                        /72.0_dp/part_param%mu)* part_param%grav_factor
+!                Vdep(7) = 0 ! TJ - test for 0G
 
                 ! deposition fraction due to sedimentation (0.853d0 is area correction ChoiKim2007)
+                !DepFrac(5) = 0 ! TJ - test for 0G
                 DepFrac(5) = part_param%prho &
                              *9.81e3_dp & !part_param%gravityy &
                              *part_param%pdia**2.0_dp &
-                             *dt/12.0_dp/part_param%mu/Dalv!*0.853_dp
+                             *dt/12.0_dp/part_param%mu/Dalv* part_param%grav_factor
+
+
 !                DepFrac(5) = part_acinus_field(1+gen,nunit) &
 !                             *9.81e3_dp & !part_param%gravityy &
 !                             *part_param%pdia**2.0_dp &
@@ -1725,12 +1779,13 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
                    !! Sedimentation in ducts
                    ! deposition volume due to sedimentation (statistic orientation to gravity)
                    ! TJ - change back
+
                    Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
-                        *part_param%prho &
+                        *part_param%prho * part_param%grav_factor &
                         *9.81e3_dp & !*part_param%gravityy &
                         *part_param%pdia**2.0_dp &
                         *part_param%LacTLC(gen+1)*vol_croot_scale*radius(gen)*dt/9.0_dp/part_param%mu !*Ccun
-
+                    !Vdep(5) = 0
 !                   Vdep(5) = (2.0_dp**gen)*2.0_dp/pi &
 !                        *part_acinus_field(1+gen,nunit) &
 !                        *9.81e3_dp & !*part_param%gravityy &
@@ -2261,42 +2316,79 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
   end subroutine airway_mesh_deform
 
 
+!############################################################33#############
+subroutine stoksnumber(part_param)
+
+
+
+  use other_consts, only: pi
+  use diagnostics, only: enter_exit
+  use arrays
+  use indices
+
+
+  implicit none
+
+  type(particle_parameters) :: part_param
+  real(dp) :: Ccun,Fr,stoknum
+  !     Local Variables
+  integer :: i,ne,ne0,ngen,nmax_gen,np,np1,np2,nunit
+  real(dp) :: veloc(0:9),radius(0:9)
+  character(len=60):: sub_name
+
+  !...........................................................................
+
+  sub_name = 'stocknumber'
+  call enter_exit(sub_name,1)
+
+  Ccun = 1.0_dp + 2.0_dp * part_param%lambda/part_param%pdia &
+       * (1.257_dp+0.4_dp*exp(-0.55_dp*part_param%pdia/part_param%lambda))
+  radius(0) = elem_field(ne_radius,ne)
+  veloc(0) = elem_field(ne_part_vel,ne)/pi/radius(0)**2.0_dp ! velocity terminal bronchi
+   stoknum = (part_param%prho)*veloc(0)*part_param%pdia**2.0_dp&
+                        *Ccun/(18.0_dp*radius(0)*part_param%mu)
+
+
+  Fr= veloc(0)/(SQRT(part_param%gravityz*2.0_dp*radius(0)))
+            print *, "st", stoknum
+         print *, "fr", Fr
+end subroutine stoksnumber
 !#########################################################################
 
-  function branch_length(ne)
-!!! dummy arguments
-    integer :: ne
-    ! local variables
-    integer :: generation,ne0
-    real(dp) :: length
-    logical :: continue
-    real(dp) branch_length
-
-    generation = elem_ordrs(1,ne)
-    length = elem_field(ne_length,ne)
-    ne0 = elem_cnct(-1,1,ne)
-    continue = .true.
-    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-
-    do while(continue)
-       length = length + elem_field(ne_length,ne0)
-       ne0 = elem_cnct(-1,1,ne0)
-       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-    enddo
-
-    ne0 = elem_cnct(1,1,ne)
-    continue = .true.
-    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-
-    do while(continue)
-       length = length + elem_field(ne_length,ne0)
-       ne0 = elem_cnct(1,1,ne0)
-       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-    enddo
-
-    branch_length = length
-
-  end function branch_length
+!  function branch_length(ne)
+!!!! dummy arguments
+!    integer :: ne
+!    ! local variables
+!    integer :: generation,ne0
+!    real(dp) :: length
+!    logical :: continue
+!    real(dp) branch_length
+!
+!    generation = elem_ordrs(1,ne)
+!    length = elem_field(ne_length,ne)
+!    ne0 = elem_cnct(-1,1,ne)
+!    continue = .true.
+!    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+!
+!    do while(continue)
+!       length = length + elem_field(ne_length,ne0)
+!       ne0 = elem_cnct(-1,1,ne0)
+!       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+!    enddo
+!
+!    ne0 = elem_cnct(1,1,ne)
+!    continue = .true.
+!    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+!
+!    do while(continue)
+!       length = length + elem_field(ne_length,ne0)
+!       ne0 = elem_cnct(1,1,ne0)
+!       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+!    enddo
+!
+!    branch_length = length
+!
+!  end function branch_length
 
 !#########################################################################
 
@@ -2344,6 +2436,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
     ne0 = elem_cnct(-1,1,ne)
     continue = .true.
     !if(ne0.le.200)
+    if(ne0.ne.0)then
     if(elem_ordrs(1,ne0).le.3) continue = .false.
 
     do while(continue)
@@ -2351,6 +2444,7 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
        ne0 = elem_cnct(-1,1,ne0)
        if(elem_ordrs(1,ne0).le.3)    continue = .false.
     enddo
+    endif
   end function element_lobe
 
 !    select case(hour)
@@ -2384,12 +2478,19 @@ if(abs(inlet_flow).gt.loose_tol)then ! i.e. not for breath hold
     generation = elem_ordrs(1,ne)
     ne0 = elem_cnct(-1,1,ne)
     continue = .true.
-    if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
-
+    if(ne0.eq.0) then
+       continue = .false.
+     elseif(elem_ordrs(1,ne0).ne.generation) then
+       continue = .false.
+    endif
     do while(continue)
        element_top_of_branch = ne0
        ne0 = elem_cnct(-1,1,ne0)
-       if(ne0.eq.0.or.elem_ordrs(1,ne0).ne.generation) continue = .false.
+       if(ne0.eq.0)then
+         continue = .false.
+      elseif(elem_ordrs(1,ne0).ne.generation) then
+         continue = .false.
+       endif
     enddo
 
   end function element_top_of_branch
